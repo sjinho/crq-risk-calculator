@@ -1,0 +1,1810 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RiskSync — 사이버 리스크 진단</title>
+<style>
+/* ================= DESIGN.md tokens ================= */
+:root{
+  --primary:#111111; --primary-active:#242424; --primary-disabled:#e5e7eb;
+  --ink:#111111; --body:#374151; --muted:#6b7280; --muted-soft:#898989;
+  --hairline:#e5e7eb; --hairline-soft:#f3f4f6;
+  --canvas:#ffffff; --surface-soft:#f8f9fa; --surface-card:#f5f5f5;
+  --surface-strong:#e5e7eb; --on-primary:#ffffff;
+  --risk-low:#10b981; --risk-moderate:#f59e0b; --risk-high:#ef4444;
+  --r-xs:4px; --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:16px; --r-pill:9999px;
+  --sp-xxs:4px; --sp-xs:8px; --sp-sm:12px; --sp-md:16px; --sp-lg:24px;
+  --sp-xl:32px; --sp-xxl:48px; --sp-section:64px;
+  --shadow-hover:0 1px 2px rgba(0,0,0,.04),0 2px 6px rgba(0,0,0,.06);
+  --font:Inter,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none !important}
+html,body{background:var(--canvas);color:var(--ink);font-family:var(--font);
+  font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+/* type scale */
+.display-xl{font-size:64px;font-weight:600;letter-spacing:-2px;line-height:1.05}
+.display-sm{font-size:28px;font-weight:600;letter-spacing:-.5px}
+.title-lg{font-size:22px;font-weight:600}
+.title-md{font-size:18px;font-weight:600}
+.title-sm{font-size:16px;font-weight:600}
+.body-md{font-size:16px;font-weight:400;color:var(--body)}
+.body-sm{font-size:14px;font-weight:400;color:var(--body)}
+.caption{font-size:13px;font-weight:500;color:var(--muted)}
+
+/* ================= layout ================= */
+.container{max-width:1200px;margin:0 auto;padding:0 var(--sp-lg)}
+header{border-bottom:1px solid var(--hairline);background:var(--canvas)}
+.header-inner{display:flex;align-items:center;justify-content:space-between;
+  height:64px}
+.brand{font-size:18px;font-weight:600;letter-spacing:-.3px}
+
+/* Step-0 summary bar — the one earned pill-group (nav-pill-group adaptation) */
+.summary-pills{display:flex;flex-wrap:wrap;gap:var(--sp-xs);align-items:center}
+.summary-pill{display:inline-flex;align-items:center;gap:6px;
+  border:1px solid var(--hairline);border-radius:var(--r-pill);
+  background:var(--surface-soft);padding:6px 14px;font-size:13px;
+  font-weight:500;color:var(--body)}
+.summary-pill.edit{cursor:pointer;background:var(--canvas)}
+.summary-pill.edit:hover{box-shadow:var(--shadow-hover)}
+
+/* ================= Step 0 — single-page stepper ================= */
+#step0{display:flex;justify-content:center;
+  padding:var(--sp-section) var(--sp-lg)}
+.stepper{width:100%;max-width:640px;display:flex;flex-direction:column;
+  gap:var(--sp-md)}
+.stepper h1{font-size:28px;font-weight:600;letter-spacing:-.5px;
+  margin-bottom:var(--sp-xs)}
+.stepper .sub{margin-bottom:var(--sp-xs)}
+
+/* progress rail */
+.progress-rail{display:flex;align-items:center;gap:var(--sp-xs);
+  flex-wrap:wrap;margin-bottom:var(--sp-xs)}
+.rail-item{display:flex;align-items:center;gap:6px;font-size:13px;
+  font-weight:500;color:var(--muted-soft)}
+.rail-item .chip{width:24px;height:24px;border-radius:50%;
+  border:1px solid var(--hairline);display:inline-flex;align-items:center;
+  justify-content:center;font-size:12px;font-weight:600;
+  background:var(--canvas);color:var(--muted)}
+.rail-item.active{color:var(--ink)}
+.rail-item.active .chip{background:var(--primary);
+  border-color:var(--primary);color:var(--on-primary)}
+.rail-item.done{color:var(--body)}
+.rail-item.done .chip{border-color:var(--primary);color:var(--ink)}
+.rail-sep{flex:1;height:1px;background:var(--hairline);min-width:12px}
+
+/* step cards: one question at a time — active / done / locked */
+.step-card{border:1px solid var(--hairline);border-radius:var(--r-lg);
+  background:var(--canvas);padding:var(--sp-lg);
+  transition:opacity .25s,border-color .25s}
+.step-card.active{border-color:var(--primary);box-shadow:var(--shadow-hover)}
+.step-card.locked{opacity:.4;pointer-events:none}
+.step-num{font-size:13px;font-weight:500;color:var(--muted);
+  margin-bottom:var(--sp-xxs)}
+.step-title{font-size:18px;font-weight:600;margin-bottom:var(--sp-sm)}
+/* "why we ask" — gray explanatory treatment (feature-card mapping) */
+.step-why{background:var(--surface-card);border-radius:var(--r-md);
+  padding:var(--sp-sm) var(--sp-md);font-size:13px;font-weight:500;
+  color:var(--muted);margin-bottom:var(--sp-md)}
+.step-why ul{margin:var(--sp-xxs) 0 0 16px;font-weight:400;
+  color:var(--body)}
+.step-why li{margin-top:2px}
+/* collapsed summary shown when a step is done */
+.done-summary{display:none;align-items:center;gap:var(--sp-sm);
+  font-size:14px}
+.step-card.done .done-summary{display:flex}
+.step-card.done .step-body{display:none}
+.done-summary .lbl{color:var(--muted);font-size:13px;font-weight:500;
+  min-width:120px}
+.done-summary .val{font-weight:600;flex:1}
+.btn-link{background:none;border:none;font-family:var(--font);font-size:13px;
+  font-weight:500;color:var(--muted);cursor:pointer;
+  text-decoration:underline;padding:4px}
+.btn-link:hover{color:var(--ink)}
+.btn-inline{min-height:40px;padding:0 var(--sp-lg);background:var(--primary);
+  color:var(--on-primary);border:none;border-radius:var(--r-md);
+  font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer}
+.btn-inline:hover{background:var(--primary-active)}
+
+/* review step */
+.review-row{display:flex;justify-content:space-between;gap:var(--sp-md);
+  padding:var(--sp-sm) 0;border-bottom:1px solid var(--hairline-soft);
+  font-size:14px}
+.review-row span{color:var(--muted)}
+.review-row b{font-weight:600}
+.analysis-box{margin:var(--sp-md) 0;background:var(--surface-soft);
+  border:1px solid var(--hairline);border-radius:var(--r-md);
+  padding:var(--sp-sm) var(--sp-md);font-size:13px;color:var(--body)}
+.analysis-box strong{display:block;font-size:13px;font-weight:600;
+  color:var(--ink);margin-bottom:var(--sp-xxs)}
+.analysis-box ul{margin-left:16px}
+.field{margin-bottom:var(--sp-md)}
+.field label{display:block;font-size:13px;font-weight:500;color:var(--muted);
+  margin-bottom:var(--sp-xxs)}
+.field select{width:100%;min-height:40px;padding:8px 12px;font-size:14px;
+  font-family:var(--font);color:var(--ink);background:var(--canvas);
+  border:1px solid var(--hairline);border-radius:var(--r-md)}
+.field select:focus{outline:2px solid var(--primary);outline-offset:0}
+.field .hint{font-size:13px;font-weight:500;color:var(--muted-soft);
+  margin-top:var(--sp-xxs)}
+.btn-primary{width:100%;min-height:44px;margin-top:var(--sp-xs);
+  background:var(--primary);color:var(--on-primary);border:none;
+  border-radius:var(--r-md);font-size:15px;font-weight:600;
+  font-family:var(--font);cursor:pointer}
+.btn-primary:hover{background:var(--primary-active)}
+.btn-primary:disabled{background:var(--primary-disabled);
+  color:var(--muted-soft);cursor:not-allowed}
+
+/* ================= loading ================= */
+#loading{display:flex;flex-direction:column;align-items:center;gap:var(--sp-md);
+  padding:calc(var(--sp-section)*1.5) var(--sp-lg)}
+.spinner{width:28px;height:28px;border:3px solid var(--hairline);
+  border-top-color:var(--primary);border-radius:50%;
+  animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ================= Layer 1 ================= */
+#results{padding-bottom:var(--sp-xxl)}
+
+.kpi-band{padding:var(--sp-section) 0}
+.kpi-grid{display:grid;gap:var(--sp-md);
+  grid-template-columns:1fr 2fr 2fr}
+.kpi-card{border:1px solid var(--hairline);border-radius:var(--r-md);
+  padding:var(--sp-xl);background:var(--canvas);display:flex;
+  flex-direction:column;gap:var(--sp-sm);min-width:0}
+.kpi-card:hover{box-shadow:var(--shadow-hover)}
+.kpi-label{font-size:13px;font-weight:500;color:var(--muted)}
+.kpi-value{display:flex;align-items:baseline;gap:var(--sp-xs);flex-wrap:wrap}
+.kpi-big{font-size:64px;font-weight:600;letter-spacing:-2px;line-height:1.05}
+/* long values step down to display-lg (48px) — DESIGN.md floor, never smaller */
+.kpi-big.long{font-size:48px;letter-spacing:-1.5px}
+.kpi-sub{font-size:13px;font-weight:500;color:var(--muted-soft)}
+
+/* risk level indicator — one of the only three permitted risk-color uses */
+.risk-badge{display:inline-flex;align-items:center;gap:8px;font-size:28px;
+  font-weight:600;letter-spacing:-.5px}
+.risk-dot{width:14px;height:14px;border-radius:50%}
+.risk-LOW .risk-dot{background:var(--risk-low)}
+.risk-LOW{color:var(--risk-low)}
+.risk-MODERATE .risk-dot{background:var(--risk-moderate)}
+.risk-MODERATE{color:var(--risk-moderate)}
+.risk-HIGH .risk-dot{background:var(--risk-high)}
+.risk-HIGH{color:var(--risk-high)}
+
+/* Confidence Flag component — per DESIGN.md spec, one treatment everywhere */
+.conf-flag{position:relative;display:inline-flex;align-items:center;
+  justify-content:center;border-radius:var(--r-pill);font-size:13px;
+  font-weight:500;padding:3px 10px;cursor:default;white-space:nowrap}
+.conf-flag::after{content:"";position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%);min-width:32px;min-height:32px}/* 32px hit area */
+.conf-flag.medium{background:var(--hairline-soft);color:var(--muted)}
+.conf-flag.low{background:rgba(245,158,11,.15);color:var(--risk-moderate)}
+/* High confidence / no-caveat state — neutral outline, not a warning color */
+.conf-flag.high{background:var(--canvas);color:var(--body);border:1px solid var(--hairline)}
+.conf-flag .tooltip{display:none;position:absolute;z-index:10;bottom:130%;
+  left:50%;transform:translateX(-50%);width:280px;background:var(--ink);
+  color:#fff;font-size:13px;font-weight:400;line-height:1.45;
+  border-radius:var(--r-md);padding:var(--sp-sm) var(--sp-md);
+  text-align:left;white-space:normal}
+.conf-flag:hover .tooltip,.conf-flag:focus .tooltip{display:block}
+.conf-flag .tooltip ul{margin-left:16px}
+
+/* appetite select inside coverage card */
+.appetite{display:inline-flex;align-items:center;gap:6px;font-size:13px;
+  font-weight:500;color:var(--muted)}
+.appetite select{min-height:28px;border:1px solid var(--hairline);
+  border-radius:var(--r-sm);font-size:13px;font-family:var(--font);
+  color:var(--body);padding:2px 6px;background:var(--canvas)}
+
+/* info tooltip trigger (model confidence card) */
+.info-tip{position:relative;display:inline-flex;width:18px;height:18px;
+  border:1px solid var(--hairline);border-radius:50%;align-items:center;
+  justify-content:center;font-size:11px;color:var(--muted);cursor:default}
+.info-tip .tooltip{display:none;position:absolute;z-index:10;bottom:140%;
+  left:50%;transform:translateX(-50%);width:300px;background:var(--ink);
+  color:#fff;font-size:13px;line-height:1.45;border-radius:var(--r-md);
+  padding:var(--sp-sm) var(--sp-md);white-space:normal}
+.info-tip:hover .tooltip{display:block}
+.info-tip .tooltip ul{margin-left:16px}
+
+/* ================= Layer 2 — Risk Analysis ================= */
+.dash-section{margin-top:var(--sp-xxl);padding-top:var(--sp-xl);
+  border-top:1px solid var(--hairline)}
+.dash-section-title{font-size:22px;font-weight:600;letter-spacing:-.3px;
+  margin-bottom:var(--sp-lg)}
+/* product-mockup-card adaptation: real computed output, white/hairline/lg */
+.card-mockup{background:var(--canvas);border:1px solid var(--hairline);
+  border-radius:var(--r-lg);padding:var(--sp-lg)}
+.card-mockup-title{font-size:16px;font-weight:600;margin-bottom:var(--sp-md)}
+/* the histogram is the primary visual of Layer 2 — full width, more padding,
+   more chart height than a standard card-mockup */
+.card-mockup.hero{padding:var(--sp-xl)}
+.hero-subsection{margin-top:var(--sp-xl);padding-top:var(--sp-lg);
+  border-top:1px solid var(--hairline)}
+.toggle-group{display:inline-flex;border:1px solid var(--hairline);
+  border-radius:var(--r-pill);overflow:hidden;flex-shrink:0}
+.toggle-group button{background:var(--canvas);border:none;padding:5px 14px;
+  font-family:var(--font);font-size:13px;font-weight:500;color:var(--muted);
+  cursor:pointer}
+.toggle-group button.active{background:var(--primary);color:var(--on-primary)}
+.card-mockup-head{display:flex;align-items:baseline;justify-content:space-between;
+  flex-wrap:wrap;gap:var(--sp-xs);margin-bottom:var(--sp-md)}
+.card-mockup-head .card-mockup-title{margin-bottom:0}
+
+/* feature-card adaptation: light-gray, "context not measured data" */
+.card-feature{background:var(--surface-card);border-radius:var(--r-lg);
+  padding:var(--sp-lg);margin-bottom:var(--sp-lg)}
+.card-feature-title{font-size:16px;font-weight:600;margin-bottom:var(--sp-xxs)}
+.card-feature-note{font-size:13px;color:var(--muted);margin-bottom:var(--sp-sm)}
+.card-feature ul{margin-left:18px;font-size:14px;color:var(--body)}
+.card-feature li{margin-top:4px}
+
+/* "featured but not dark" card — the key decision card */
+.card-featured{background:var(--canvas);border:1px solid var(--hairline);
+  border-radius:var(--r-lg);padding:var(--sp-xl)}
+.card-featured-title{font-size:18px;font-weight:600;margin-bottom:var(--sp-sm)}
+
+/* Loss Distribution histogram — hero chart of Layer 2. X/Y axes with real
+   gridlines+labels and colored Mean/P99 markers are drawn inside the SVG
+   itself (see renderHistogram), so there's no separate axis/legend DOM
+   below it beyond the color-keyed legend row. */
+.hist-wrap{position:relative}
+.hist-svg{width:100%;height:280px;display:block}
+.hist-legend{display:flex;flex-wrap:wrap;gap:var(--sp-lg);margin-top:var(--sp-sm);
+  font-size:13px;color:var(--body)}
+.hist-legend-item i{display:inline-block;width:12px;height:3px;border-radius:1px;
+  margin-right:5px;vertical-align:middle}
+.hist-hitzones{position:absolute;display:flex}
+.hist-hitzone{position:relative;flex:1;cursor:crosshair}
+.hist-hitzone::after{content:"";position:absolute;left:50%;top:0;bottom:0;
+  width:1px;background:var(--primary);opacity:0;pointer-events:none}
+.hist-hitzone:hover::after{opacity:.5}
+.hist-hitzone .tooltip{display:none;position:absolute;z-index:10;bottom:100%;
+  left:50%;transform:translateX(-50%);width:168px;margin-bottom:8px;
+  background:var(--ink);color:#fff;font-size:13px;line-height:1.45;
+  border-radius:var(--r-md);padding:8px 10px;text-align:center;
+  white-space:normal;pointer-events:none}
+.hist-hitzone:hover .tooltip{display:block}
+
+/* Year-by-year trend line charts (BI/Recovery accordion panels) — same
+   hitzone+.tooltip hover pattern as the histogram, sized for a small dot
+   target instead of a full-height bin column. */
+.linechart-wrap{position:relative;margin-top:var(--sp-sm)}
+.linechart-svg{width:100%;height:auto;display:block}
+.linechart-hitzones{position:absolute;inset:0}
+.linechart-hitzone{position:absolute;width:16px;height:16px;
+  margin:-8px 0 0 -8px;cursor:crosshair}
+.linechart-hitzone .tooltip{display:none;position:absolute;z-index:10;bottom:100%;
+  left:50%;transform:translateX(-50%);width:120px;margin-bottom:6px;
+  background:var(--ink);color:#fff;font-size:12px;line-height:1.4;
+  border-radius:var(--r-md);padding:6px 8px;text-align:center;
+  white-space:normal;pointer-events:none}
+.linechart-hitzone:hover .tooltip{display:block}
+
+/* Loss Breakdown — the donut is the hero visual here (no separate stacked
+   bar; it duplicated the same Primary/Secondary/Unclassified split at a
+   coarser grain and only made small slices like Credit Monitoring/
+   Notification harder to read at the old 120px size) */
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;
+  margin-right:4px;vertical-align:middle;flex-shrink:0}
+
+.donut-row{display:flex;align-items:center;gap:var(--sp-xl);margin-top:var(--sp-md);
+  flex-wrap:wrap}
+.donut-svg{width:240px;height:240px;flex-shrink:0}
+.donut-svg circle{cursor:default}
+.donut-legend{flex:1;min-width:220px;margin-top:0}
+.breakdown-components{list-style:none;font-size:14px;margin-top:var(--sp-sm)}
+.breakdown-components li{display:flex;flex-wrap:wrap;justify-content:space-between;
+  gap:var(--sp-xxs) var(--sp-sm);padding:10px 0;border-bottom:1px solid var(--hairline-soft)}
+.breakdown-components .comp-name{display:flex;align-items:center;gap:6px}
+/* Primary/Secondary tags stay neutral (ink/muted); only Mixed borrows amber
+   — DESIGN.md: "we're not sure" IS a moderate-confidence signal, not decoration */
+.tag-ps{font-size:11px;font-weight:500;padding:1px 6px;border-radius:var(--r-xs);
+  border:1px solid var(--hairline);color:var(--muted)}
+.tag-ps.mixed{border:none;background:rgba(245,158,11,.15);color:var(--risk-moderate)}
+
+/* Coverage Recommendation scenario badges — one of the 3 places risk-low/
+   risk-high are allowed to appear per DESIGN.md */
+.scenario-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+  gap:var(--sp-sm);margin:var(--sp-md) 0}
+.scenario-item{display:flex;justify-content:space-between;align-items:center;
+  padding:var(--sp-sm) var(--sp-md);border:1px solid var(--hairline-soft);
+  border-radius:var(--r-md);font-size:14px}
+.cov-badge{display:inline-flex;align-items:center;border-radius:var(--r-pill);
+  font-size:13px;font-weight:500;padding:3px 10px}
+.cov-badge.covered{background:rgba(16,185,129,.15);color:var(--risk-low)}
+.cov-badge.excluded{background:rgba(239,68,68,.15);color:var(--risk-high)}
+
+/* ================= Layer 3 — Advanced Analytics ================= */
+/* Mobile: tables scroll horizontally rather than wrapping, so numbers
+   stay aligned (per DESIGN.md responsive spec) */
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.table-scroll table{min-width:480px}
+/* code (JetBrains Mono) typography — the one place monospace is used,
+   per DESIGN.md, so the Monte Carlo stats table's numbers align in columns */
+.stats-table{width:100%;border-collapse:collapse}
+.stats-table.code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:14px}
+.stats-table th{text-align:left;font-family:var(--font);font-size:12px;
+  font-weight:600;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.02em;padding:8px 12px;border-bottom:1px solid var(--hairline)}
+.stats-table td{padding:8px 12px;border-bottom:1px solid var(--hairline-soft)}
+.stats-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+
+/* ================= Layer 4 — Methodology & Transparency ================= */
+/* plain, document-like — Assumption/Evidence Registers are tables, not cards */
+.doc-section{margin-bottom:var(--sp-xl)}
+.doc-section-title{font-size:18px;font-weight:600;margin-bottom:var(--sp-xxs)}
+.doc-section-note{font-size:13px;color:var(--muted);margin-bottom:var(--sp-sm)}
+.doc-table{width:100%;border-collapse:collapse;font-size:14px}
+.doc-table th{text-align:left;padding:8px 10px;border-bottom:2px solid var(--hairline);
+  font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.02em}
+.doc-table td{padding:8px 10px;border-bottom:1px solid var(--hairline-soft);
+  vertical-align:top}
+.doc-group-header td{background:var(--surface-soft);font-weight:600;
+  font-size:13px;color:var(--ink);padding-top:14px}
+
+.limitation-list{list-style:none}
+.limitation-list li{padding:var(--sp-sm) 0;border-bottom:1px solid var(--hairline-soft)}
+
+.tally-row{display:flex;gap:var(--sp-md);flex-wrap:wrap;margin-top:var(--sp-sm)}
+.tally-item{border:1px solid var(--hairline);border-radius:var(--r-md);
+  padding:var(--sp-sm) var(--sp-lg);text-align:center;min-width:88px}
+.tally-item.current{border-color:var(--primary);border-width:2px}
+.tally-num{font-size:28px;font-weight:600}
+.tally-label{font-size:12px;color:var(--muted);margin-top:2px}
+.tally-item.wide{flex:1;min-width:150px;text-align:left}
+.tally-item .tally-caption{font-size:11px;color:var(--muted-soft);margin-top:4px}
+
+/* Incident Cost Breakdown accordion — 4 clickable summary cards (Crisis
+   Services / BI / Legal / Recovery), each expands to its own self-contained
+   detail (a donut for Crisis Services, plain stat rows for the other 3).
+   Avoids forcing incompatible-population figures into one shared chart. */
+.cost-accordion{margin-top:var(--sp-sm)}
+.accordion-item{border:1px solid var(--hairline);border-radius:var(--r-md);
+  margin-bottom:var(--sp-sm);overflow:hidden}
+.accordion-header{display:flex;align-items:center;width:100%;
+  padding:var(--sp-md);background:var(--canvas);border:none;cursor:pointer;
+  font-family:var(--font);text-align:left;gap:var(--sp-sm)}
+.accordion-header:hover{background:var(--surface-soft)}
+.accordion-header.active{background:var(--surface-soft)}
+.accordion-label{font-size:14px;font-weight:600;color:var(--ink);flex:1}
+.accordion-value{font-size:18px;font-weight:600;color:var(--ink)}
+.accordion-chevron{font-size:11px;color:var(--muted-soft);
+  transition:transform .2s;margin-left:var(--sp-sm)}
+.accordion-header.active .accordion-chevron{transform:rotate(180deg)}
+.accordion-panel{padding:var(--sp-lg);border-top:1px solid var(--hairline-soft)}
+.cost-detail-rows{display:flex;flex-direction:column}
+.cost-detail-row{display:flex;justify-content:space-between;gap:var(--sp-sm);
+  font-size:14px;padding:7px 0;border-bottom:1px solid var(--hairline-soft)}
+.cost-detail-row span{color:var(--muted)}
+.cost-detail-row b{color:var(--ink);font-weight:600}
+
+/* Top Causes of Loss — ranked, data-driven (replaces the old illustrative
+   generic risk-driver examples with actual claims-study statistics) */
+.cause-list{list-style:none;margin-top:var(--sp-sm);counter-reset:none}
+.cause-list li{display:flex;align-items:baseline;gap:var(--sp-sm);
+  padding:8px 0;border-bottom:1px solid var(--hairline-soft)}
+.cause-rank{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px;
+  color:var(--muted-soft);width:16px;flex-shrink:0}
+.cause-name{flex:1;font-size:14px;color:var(--ink);font-weight:500}
+.cause-pct{font-size:14px;font-weight:600;color:var(--ink)}
+.cause-claims{font-size:12px;color:var(--muted-soft);margin-left:6px}
+
+/* the ONE surface-dark card on the whole product (Dark surface rule) —
+   signals "audit/citation mode", the closing band of the dashboard */
+.dark-summary{background:var(--surface-dark);color:var(--on-dark);
+  border-radius:var(--r-lg);padding:var(--sp-xl)}
+.dark-summary-title{font-size:18px;font-weight:600;margin-bottom:var(--sp-sm)}
+.dark-summary .sub{color:var(--on-dark-soft);font-size:14px}
+.dark-summary ul{margin:var(--sp-sm) 0 0 18px;color:var(--on-dark-soft);
+  font-size:14px}
+.dark-summary li{margin-top:4px}
+
+/* collapsed next-step rows */
+.collapsed-rows{border-top:1px solid var(--hairline);margin-top:var(--sp-xl)}
+.collapsed-row{display:flex;align-items:center;gap:var(--sp-xs);
+  padding:var(--sp-md) var(--sp-xxs);border-bottom:1px solid var(--hairline);
+  color:var(--muted-soft);font-size:14px;font-weight:500}
+.collapsed-row .arrow{font-size:12px}
+.collapsed-row .tag{font-size:12px;border:1px solid var(--hairline);
+  border-radius:var(--r-xs);padding:1px 6px;color:var(--muted-soft)}
+
+.footnotes{margin-top:var(--sp-lg);display:flex;flex-direction:column;
+  gap:var(--sp-xxs)}
+.footnotes p{font-size:13px;font-weight:500;color:var(--muted-soft)}
+
+/* ================= AI tool (floating) ================= */
+/* Pure UI overlay — reads state.result/state.methodology, never writes to
+   them, never touches calculate() or any render* function's own DOM.
+   Zero effect on the dashboard's own logic or numbers. */
+#aiFabWrap{position:fixed;right:var(--sp-lg);bottom:var(--sp-lg);z-index:50}
+#aiFab{width:56px;height:56px;border-radius:var(--r-pill);border:none;
+  display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#ffb98a,#ff8f5e);
+  cursor:pointer;box-shadow:0 4px 14px rgba(255,140,90,.4)}
+#aiFab:hover{background:linear-gradient(135deg,#ffad76,#ff7f47)}
+#aiFab svg{width:26px;height:26px;fill:#fff}
+.ai-panel{position:absolute;right:0;bottom:64px;width:340px;max-width:calc(100vw - 48px);
+  max-height:70vh;overflow-y:auto;background:var(--canvas);
+  border:1px solid var(--hairline);border-radius:var(--r-lg);
+  box-shadow:0 8px 24px rgba(0,0,0,.12);padding:var(--sp-md)}
+.ai-panel-header{display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:var(--sp-sm);font-size:14px;font-weight:600}
+.ai-menu-item{display:block;width:100%;text-align:left;padding:var(--sp-sm);
+  border:1px solid var(--hairline);border-radius:var(--r-md);background:var(--canvas);
+  cursor:pointer;font-family:var(--font);font-size:13px;font-weight:500;
+  color:var(--ink);margin-bottom:var(--sp-xs)}
+.ai-menu-item:hover{background:var(--surface-soft)}
+.ai-answer{font-size:13px;line-height:1.6;color:var(--body);
+  background:var(--surface-soft);border-radius:var(--r-md);padding:var(--sp-sm);
+  white-space:pre-line}
+
+/* ================= Print report ================= */
+/* Hidden on screen entirely; only rendered when generateReport() populates
+   it and calls window.print(). The print media query hides everything
+   else in body so the printed/PDF-saved output is just this content. */
+#printReport{display:none}
+.pr-title{font-size:20px;font-weight:700;margin-bottom:4px}
+.pr-sub{font-size:12px;color:#666;margin-bottom:20px}
+.pr-section{margin-top:20px}
+.pr-section-title{font-size:14px;font-weight:700;border-bottom:1px solid #ccc;
+  padding-bottom:4px;margin-bottom:8px}
+.pr-kv{display:flex;justify-content:space-between;font-size:12px;padding:3px 0}
+.pr-big{font-size:26px;font-weight:700}
+.pr-table{width:100%;border-collapse:collapse;font-size:12px}
+.pr-table td{padding:4px 0;border-bottom:1px solid #eee}
+.pr-table td:last-child{text-align:right;font-weight:600}
+@media print{
+  body > *:not(#printReport){display:none !important}
+  #printReport{display:block !important}
+}
+
+/* ================= responsive (DESIGN.md breakpoints) ================= */
+@media (max-width:1024px){
+  .kpi-grid{grid-template-columns:1fr 1fr}
+}
+@media (max-width:767px){
+  .kpi-grid{grid-template-columns:1fr}
+  .kpi-big{font-size:48px;letter-spacing:-1.5px}/* display-lg step-down */
+  .header-inner{flex-wrap:wrap;height:auto;padding:var(--sp-sm) 0}
+  .kpi-band{padding:var(--sp-xl) 0}
+  .scenario-grid{grid-template-columns:1fr}
+  .donut-row{flex-direction:column;align-items:stretch}
+  .donut-legend{min-width:0}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="container header-inner">
+    <div class="brand">CRQ</div>
+    <div id="summaryBar" class="summary-pills" hidden>
+      <span class="summary-pill" id="pillInputs"></span>
+      <span class="summary-pill edit" id="pillEdit" role="button" tabindex="0">✎ 조건 변경</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ============ Step 0 — single-page stepper (one page, sequential focus) ============ -->
+  <section id="step0">
+    <div class="stepper">
+      <div>
+        <h1>사이버 리스크 진단</h1>
+        <p class="sub body-sm">세 가지 정보만으로 연간 사이버 손실 분포를 계산합니다.
+          모든 단계 완료 전에는 결과가 표시되지 않습니다.</p>
+      </div>
+
+      <div class="progress-rail" id="rail">
+        <div class="rail-item" data-rail="0"><span class="chip">1</span>업종</div>
+        <div class="rail-sep"></div>
+        <div class="rail-item" data-rail="1"><span class="chip">2</span>연매출</div>
+        <div class="rail-sep"></div>
+        <div class="rail-item" data-rail="2"><span class="chip">3</span>보안등급</div>
+        <div class="rail-sep"></div>
+        <div class="rail-item" data-rail="3"><span class="chip">4</span>확인</div>
+      </div>
+
+      <!-- Step 1: Industry -->
+      <div class="step-card" id="card0">
+        <div class="done-summary">
+          <span class="lbl">업종</span><span class="val" id="done0"></span>
+          <button class="btn-link" data-goto="0">수정</button>
+        </div>
+        <div class="step-body">
+          <div class="step-num">1 / 4</div>
+          <div class="step-title">어떤 업종에 해당하나요?</div>
+          <div class="step-why">이 정보로 산정하는 항목
+            <ul>
+              <li>업종별 연간 공격 빈도 (IRIS 2025 기준)</li>
+              <li>주요 위협 프로파일 (Verizon DBIR)</li>
+              <li>업종별 손실 심각도 분포</li>
+            </ul>
+          </div>
+          <div class="field">
+            <select id="selIndustry" aria-label="업종">
+              <option value="">업종을 선택하세요</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Revenue -->
+      <div class="step-card" id="card1">
+        <div class="done-summary">
+          <span class="lbl">연매출 구간</span><span class="val" id="done1"></span>
+          <button class="btn-link" data-goto="1">수정</button>
+        </div>
+        <div class="step-body">
+          <div class="step-num">2 / 4</div>
+          <div class="step-title">연매출 규모는 어느 구간인가요?</div>
+          <div class="step-why">이 정보로 산정하는 항목
+            <ul>
+              <li>매출 규모별 공격 빈도 보정</li>
+              <li>손실 분포 참조 밴드 (리스크 수준 판정)</li>
+              <li>권장 보험 한도 산정</li>
+            </ul>
+          </div>
+          <div class="field">
+            <select id="selRevenue" aria-label="연매출 구간">
+              <option value="">매출 구간을 선택하세요</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: SSC (optional) -->
+      <div class="step-card" id="card2">
+        <div class="done-summary">
+          <span class="lbl">SecurityScorecard</span><span class="val" id="done2"></span>
+          <button class="btn-link" data-goto="2">수정</button>
+        </div>
+        <div class="step-body">
+          <div class="step-num">3 / 4 · 선택 사항</div>
+          <div class="step-title">SecurityScorecard 등급이 있나요?</div>
+          <div class="step-why">외부 보안 평판 등급으로 공격 빈도(LEF)만 보정합니다 —
+            손실 심각도에는 적용되지 않습니다.
+            <ul><li>단일 출처 자료 기반 — 방향성 참고용</li></ul>
+          </div>
+          <div class="field">
+            <select id="selSsc" aria-label="SecurityScorecard 등급">
+              <option value="">선택 안 함 — SSC 보정 미적용</option>
+            </select>
+          </div>
+          <button class="btn-inline" id="btnSscNext">다음</button>
+        </div>
+      </div>
+
+      <!-- Step 4: Review -->
+      <div class="step-card" id="card3">
+        <div class="step-body">
+          <div class="step-num">4 / 4</div>
+          <div class="step-title">입력 내용을 확인하세요</div>
+          <div class="review-row"><span>업종</span><b id="rvIndustry"></b></div>
+          <div class="review-row"><span>연매출 구간</span><b id="rvRevenue"></b></div>
+          <div class="review-row"><span>SecurityScorecard 등급</span><b id="rvSsc"></b></div>
+          <div class="analysis-box">
+            <strong>예상 분석</strong>
+            <ul>
+              <li>Monte Carlo Simulation — 100,000회 시뮬레이션</li>
+              <li>고정 시드(42) — 동일 입력이면 항상 동일한 결과</li>
+            </ul>
+          </div>
+          <button id="btnRun" class="btn-primary">사이버 리스크 진단 실행</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ loading ============ -->
+  <section id="loading" hidden>
+    <div class="spinner" aria-hidden="true"></div>
+    <p class="body-sm">리스크 프로파일을 계산하는 중...</p>
+  </section>
+
+  <!-- ============ Layer 1 ============ -->
+  <section id="results" hidden>
+    <div class="container">
+      <div class="kpi-band">
+        <div class="kpi-grid">
+
+          <div class="kpi-card">
+            <div class="kpi-label">사이버 리스크 수준</div>
+            <div class="kpi-value">
+              <span id="riskBadge" class="risk-badge"><span class="risk-dot"></span><span id="riskText"></span></span>
+            </div>
+            <div class="kpi-sub" id="riskSub"></div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-label">연간 기대 손실 (Expected Annual Loss)</div>
+            <div class="kpi-value">
+              <span id="ealValue" class="kpi-big"></span>
+              <span id="ealFlag"></span>
+            </div>
+            <div class="kpi-sub" id="ealFull"></div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-label">최대 예상 손실 (Maximum Probable Loss, P99)</div>
+            <div class="kpi-value">
+              <span id="covValue" class="kpi-big"></span>
+              <span id="covFlag"></span>
+            </div>
+            <div class="kpi-sub" id="covSub"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ============ Layer 2 — Risk Analysis ============ -->
+      <div class="dash-section">
+        <div class="dash-section-title">리스크 분석 (Risk Analysis)</div>
+
+        <div class="card-mockup hero">
+          <div class="card-mockup-title">Monte Carlo 손실 분포</div>
+          <div class="hist-wrap" id="histWrap">
+            <div id="histChart"></div>
+            <div id="histHitzones" class="hist-hitzones"></div>
+          </div>
+          <div id="histLegend" class="hist-legend"></div>
+        </div>
+
+        <div class="card-mockup">
+          <div class="card-mockup-title">사고 비용 구성 (Incident Cost Breakdown)</div>
+          <div id="costAccordion" class="cost-accordion"></div>
+        </div>
+
+        <div class="card-feature">
+          <div class="card-feature-title">주요 침해 패턴 (Top Attack Patterns)</div>
+          <ol id="riskDrivers" class="cause-list"></ol>
+        </div>
+
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ============ AI Tool (floating) ============ -->
+<div id="aiFabWrap">
+  <button type="button" id="aiFab" aria-label="AI 도구 열기">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5z"></path></svg>
+  </button>
+  <div id="aiPanel" class="ai-panel" hidden>
+    <div class="ai-panel-header">
+      <span id="aiPanelTitle">AI 도구</span>
+      <button type="button" id="aiBack" class="btn-link" hidden>← 뒤로</button>
+    </div>
+    <div id="aiPanelBody"></div>
+  </div>
+</div>
+
+<!-- Print-only report content — hidden on screen, shown via @media print
+     when generateReport() populates it and calls window.print(). Keeps the
+     live dashboard's own DOM completely untouched (see #printReport rule). -->
+<div id="printReport"></div>
+
+<script>
+"use strict";
+// Backend origin: same-origin for local dev (python3 server.py), Render URL
+// in production since the static frontend (Netlify) and API (Render) are
+// separate origins. Update the Render URL once the service is deployed.
+const API_BASE = (location.hostname === "localhost" || location.hostname === "127.0.0.1")
+  ? ""
+  : "https://risksync-crq-backend.onrender.com";
+const $ = (id) => document.getElementById(id);
+const state = { options: null, result: null,
+  // Independent per-row Mean/P99 basis (2026-08-07, user feedback: a single
+  // shared toggle meant clicking P99 anywhere changed all four rows at
+  // once — each of Crisis/BI/Recovery now remembers its own choice).
+  breakdownBase: { crisis: "mean", bi: "mean", recovery: "mean" } };
+
+const RISK_KO = { LOW: "낮음", MODERATE: "보통", HIGH: "높음" };
+
+function fmtCompact(v) {
+  if (v >= 1e9) return "$" + (v / 1e9).toFixed(2) + "B";
+  if (v >= 1e6) return "$" + (v / 1e6).toFixed(2) + "M";
+  if (v >= 1e3) return "$" + Math.round(v / 1e3) + "K";
+  return "$" + Math.round(v);
+}
+function fmtFull(v) { return "USD " + Math.round(v).toLocaleString("en-US"); }
+function setBigNumber(el, v) {
+  const text = fmtCompact(v);
+  el.textContent = text;
+  el.classList.toggle("long", text.length >= 7);
+}
+
+function show(section) {
+  for (const id of ["step0", "loading", "results"]) $(id).hidden = (id !== section);
+  $("summaryBar").hidden = (section !== "results");
+}
+
+/* ---------- Layer 4 data (static across calculations, fetched once) ------ */
+async function loadMethodology() {
+  const res = await fetch(`${API_BASE}/api/methodology`);
+  state.methodology = await res.json();
+}
+
+/* ---------- Step 0 ---------- */
+async function loadOptions() {
+  const res = await fetch(`${API_BASE}/api/options`);
+  state.options = await res.json();
+  for (const ind of state.options.industries) {
+    const o = document.createElement("option");
+    o.value = ind.display_name; o.textContent = ind.display_name;
+    $("selIndustry").appendChild(o);
+  }
+  for (const rc of state.options.revenue_classes) {
+    const o = document.createElement("option");
+    o.value = rc; o.textContent = rc;
+    $("selRevenue").appendChild(o);
+  }
+  for (const g of state.options.ssc_grades) {
+    const o = document.createElement("option");
+    o.value = g; o.textContent = g + " 등급";
+    $("selSsc").appendChild(o);
+  }
+}
+
+/* ---------- Step 0 stepper (single page, sequential focus) ---------- */
+const stepper = { cur: 0, maxReached: 0, sscVisited: false };
+
+function stepDone(i) {
+  if (i === 0) return !!$("selIndustry").value;
+  if (i === 1) return !!$("selRevenue").value;
+  if (i === 2) return stepper.sscVisited;
+  return false; // review is never "done"
+}
+
+function renderStepper() {
+  for (let i = 0; i < 4; i++) {
+    const card = $("card" + i);
+    const done = stepDone(i) && i !== stepper.cur;
+    card.classList.toggle("active", i === stepper.cur);
+    card.classList.toggle("done", done);
+    card.classList.toggle("locked",
+      i > stepper.maxReached && i !== stepper.cur);
+    const rail = document.querySelector('[data-rail="' + i + '"]');
+    rail.classList.toggle("active", i === stepper.cur);
+    rail.classList.toggle("done", done);
+  }
+  $("done0").textContent = $("selIndustry").value;
+  $("done1").textContent = $("selRevenue").value;
+  $("done2").textContent = $("selSsc").value
+    ? $("selSsc").value + " 등급" : "선택 안 함";
+  $("btnSscNext").textContent = $("selSsc").value ? "다음" : "선택 안 함으로 계속";
+  if (stepper.cur === 3) {
+    $("rvIndustry").textContent = $("selIndustry").value;
+    $("rvRevenue").textContent = $("selRevenue").value;
+    $("rvSsc").textContent = $("selSsc").value
+      ? $("selSsc").value + " 등급" : "선택 안 함 — 보정 미적용";
+    // Step 0 rule (PROJECT_BRIEF): Industry + Revenue required, SSC optional.
+    $("btnRun").disabled = !($("selIndustry").value && $("selRevenue").value);
+  }
+}
+
+function setStep(i) {
+  stepper.cur = i;
+  stepper.maxReached = Math.max(stepper.maxReached, i);
+  renderStepper();
+  $("card" + i).scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+async function runCalculation() {
+  show("loading");
+  const body = {
+    industry: $("selIndustry").value,
+    revenue: $("selRevenue").value,
+    ssc_grade: $("selSsc").value || null,
+  };
+  const started = Date.now();
+  let res, data;
+  try {
+    res = await fetch(`${API_BASE}/api/calculate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    data = await res.json();
+  } catch (e) {
+    alert("서버에 연결할 수 없습니다: " + e.message);
+    show("step0");
+    return;
+  }
+  // brief loading state per PROJECT_BRIEF interaction flow — no jarring flash
+  const wait = Math.max(0, 600 - (Date.now() - started));
+  await new Promise((r) => setTimeout(r, wait));
+  if (!res.ok) {
+    alert(data.error || "계산 중 오류가 발생했습니다.");
+    show("step0");
+    return;
+  }
+  state.result = data;
+  // show() before renderResults(): the histogram measures its container's
+  // real rendered width (see renderHistogram) to build a viewBox that
+  // exactly matches the box, avoiding SVG non-uniform-scale text distortion
+  // — that measurement only works once the section is actually visible.
+  show("results");
+  renderResults();
+}
+
+/* ---------- Confidence Flag (DESIGN.md component spec) ---------- */
+function confFlagHTML(level, reasons) {
+  if (level === "High") return "";           // absence of flag IS the signal
+  const cls = level === "Medium" ? "medium" : "low";
+  const label = level === "Medium" ? "근사치" : "단일 출처";
+  const items = reasons.map((r) => "<li>" + r + "</li>").join("");
+  return '<span class="conf-flag ' + cls + '" tabindex="0">' + label +
+         '<span class="tooltip"><ul>' + items + "</ul></span></span>";
+}
+
+// Generic pill+tooltip builder — same visual language as confFlagHTML,
+// for spots that need arbitrary label/tooltip content (Model Confidence
+// card, Top Threat "no data" state) instead of the fixed 근사치/단일출처 wording.
+function pillHTML(cls, label, tooltipInnerHTML) {
+  return '<span class="conf-flag ' + cls + '" tabindex="0">' + label +
+         '<span class="tooltip">' + tooltipInnerHTML + '</span></span>';
+}
+
+/* ---------- Layer 1 render ---------- */
+function deriveRiskLevel(r) {
+  // Documented rule (footnote): P95 annual loss vs the revenue tier's IRIS
+  // Typical/Extreme reference band (Severity_IRIS Table B, already in JSON).
+  const band = r.severity.revenue_tier_typical_extreme_usd;
+  const p95 = r.results.p95;
+  if (!band) return null;
+  if (p95 < band[0]) return "LOW";
+  if (p95 < band[1]) return "MODERATE";
+  return "HIGH";
+}
+
+// When an SSC grade is selected, the Cyber Risk Level badge is driven by
+// the grade itself instead of the P95-vs-reference-band rule above — SSC
+// is a direct external signal of security posture, so it takes over as
+// the risk-level basis for that calculation (product decision, 2026-08-06).
+// A alone = LOW (the SSC baseline/reference grade); B/C = MODERATE
+// (2.9x-5.4x breach-likelihood multiplier); D/F = HIGH (9.2x-13.8x).
+const SSC_RISK_LEVEL = { A: "LOW", B: "MODERATE", C: "MODERATE", D: "HIGH", F: "HIGH" };
+
+function renderResults() {
+  const r = state.result;
+
+  // summary pill bar
+  const ssc = r.inputs.ssc_grade ? " · SSC: " + r.inputs.ssc_grade : "";
+  $("pillInputs").textContent =
+    r.inputs.industry + " · " + r.inputs.revenue_class + ssc;
+
+  // Top-of-page notice banner removed (2026-08-06, user feedback) — the
+  // same r.flags content is no longer duplicated here; it surfaces per-
+  // number instead via the Confidence Flag pills next to EAL/MPL.
+
+  // 1. risk level — SSC grade overrides the P95-vs-band rule when present.
+  // Sub-text stays one short line either way; the full rationale (which was
+  // previously a 3-4 line paragraph here, unbalancing the KPI row's height)
+  // now lives in an (i) tooltip — same "short on the surface, detail on
+  // hover" pattern already used for the histogram's zero-loss stat.
+  let level, riskSubHTML;
+  if (r.inputs.ssc_grade) {
+    level = SSC_RISK_LEVEL[r.inputs.ssc_grade];
+    riskSubHTML = "SSC " + r.inputs.ssc_grade + "등급 (×" + r.frequency.ssc_multiplier +
+      ") 기준 <span class=\"info-tip\">i<span class=\"tooltip\">SSC 등급이 " +
+      "있으면 P95 vs 참조밴드 비교 대신 이 등급을 리스크 수준의 근거로 " +
+      "사용합니다.</span></span>";
+  } else {
+    level = deriveRiskLevel(r);
+    // No SSC input: the P95-vs-band basis (still the full source of truth
+    // for `level`) moves into the (i) tooltip, same as the SSC branch above
+    // — the visible line becomes a CTA nudging SSC entry instead.
+    riskSubHTML = "SecurityScorecard 등급을 입력하면 귀사 보안 수준을 반영해 " +
+      "재계산됩니다 → <span class=\"info-tip\">i<span class=\"tooltip\">현재 " +
+      "기준: P95 " + fmtCompact(r.results.p95) + " vs 참조밴드 " +
+      fmtCompact(r.severity.revenue_tier_typical_extreme_usd[0]) + "–" +
+      fmtCompact(r.severity.revenue_tier_typical_extreme_usd[1]) + "</span></span>";
+  }
+  $("riskBadge").className = "risk-badge risk-" + level;
+  $("riskText").textContent = RISK_KO[level] +
+    (r.inputs.ssc_grade ? " (" + r.inputs.ssc_grade + ")" : "");
+  $("riskSub").innerHTML = riskSubHTML;
+
+  // flag reasons: the calculation's own confidence reasons (specific, per spec)
+  const reasons = (r.confidence.reasons || []).concat(
+    r.frequency.baseline === "approximated"
+      ? ["빈도 기준값 근사 적용: Overall(9.3%) × 업종 배수."] : []);
+
+  // 2. expected annual loss — single short caption (KPI band stays to 3
+  // minimal cards now; the full USD figure + Monte Carlo run count already
+  // live in the Layer 3 "Monte Carlo 요약 통계" table, so nothing here is
+  // actually lost by dropping it from this headline card).
+  setBigNumber($("ealValue"), r.results.expected_annual_loss);
+  $("ealFull").textContent = "연평균 손실";
+  $("ealFlag").innerHTML = confFlagHTML(r.confidence.level, reasons);
+
+  // 3. maximum probable loss (loss exceedance inverted at risk appetite)
+  renderCoverage();
+  $("covFlag").innerHTML = confFlagHTML(r.confidence.level, reasons);
+
+  // Top Threat and Model Confidence tiles removed from the KPI band
+  // (2026-08-06, user-directed 3-card minimal redesign) — not deleted
+  // data, just relocated: Top Threat's info is the same r.top_threat used
+  // by the "주요 침해 패턴" section below, and confidence is still visible
+  // via the ealFlag/covFlag pills right on the two headline numbers.
+
+  // Layer 2 — Risk Analysis
+  renderHistogram(r);
+  renderIncidentCostAccordion(r.loss_breakdown, r);
+  renderTopRiskDrivers(r);
+}
+
+/* ---------- Layer 2: Monte Carlo Loss Distribution ---------- */
+// Two marker colors, borrowed from DESIGN.md's data-viz accent set
+// (series-1/series-3) — legitimate here because these lines aren't
+// risk-severity signals, exactly the case that palette is reserved for.
+const HIST_MARKERS = [
+  { key: "mean", label: "Mean", color: "#3b82f6" },
+  { key: "p99", label: "최대 손실 (P99)", color: "#fb923c" },
+];
+
+function histX(value, edges, padL, padR, W) {
+  const lo = Math.log10(edges[0]), hi = Math.log10(edges[edges.length - 1]);
+  if (hi <= lo || !(value > 0)) return null;
+  const v = Math.log10(Math.max(value, edges[0]));
+  const frac = Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
+  return padL + frac * (W - padL - padR);
+}
+
+function renderHistogram(r) {
+  const h = r.results.histogram;
+  $("histHitzones").innerHTML = "";
+  if (!h) {
+    $("histChart").innerHTML = '<p class="body-sm">표시할 손실 표본이 없습니다 ' +
+      '(시뮬레이션 전 구간에서 손실 $0).</p>';
+    $("histLegend").innerHTML = "";
+    return;
+  }
+  // Match the viewBox width to the container's actual rendered pixel width
+  // so the SVG scales 1:1 (no preserveAspectRatio="none" stretch) — that
+  // non-uniform scaling was distorting/squishing the <text> glyphs.
+  const W = $("histWrap").clientWidth || 640, H = 280;
+  const padL = 52, padR = 10, padT = 30, padB = 34;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const n = h.counts.length;
+  const total = h.counts.reduce((a, b) => a + b, 0) || 1;
+  const maxC = Math.max.apply(null, h.counts.concat([1]));
+  const maxShare = maxC / total * 100;
+  const barW = plotW / n;
+
+  let bars = "";
+  for (let i = 0; i < n; i++) {
+    const bh = (h.counts[i] / maxC) * plotH;
+    const x = padL + i * barW, y = H - padB - bh;
+    bars += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' +
+      Math.max(0, barW - 1).toFixed(1) + '" height="' + bh.toFixed(1) +
+      '" fill="var(--primary)" opacity="0.85"></rect>';
+  }
+
+  // Y axis — "발생 비율(%)": 3 gridlines from 0 to the tallest bar's share,
+  // so bar height has an actual, readable scale instead of just "taller =
+  // more" with no reference number.
+  let yAxis = "";
+  for (let k = 0; k <= 2; k++) {
+    const frac = k / 2;
+    const y = H - padB - frac * plotH;
+    const val = maxShare * frac;
+    yAxis += '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) +
+      '" y2="' + y.toFixed(1) + '" stroke="var(--hairline)" stroke-width="1"></line>' +
+      '<text x="' + (padL - 8) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" ' +
+      'font-size="10" fill="var(--muted-soft)">' + val.toFixed(1) + "%</text>";
+  }
+  const yTitle = '<text x="' + (padL - 8) + '" y="' + (padT - 12) +
+    '" text-anchor="end" font-size="10" fill="var(--muted)">발생 비율</text>';
+
+  // X axis — decade gridlines ($1K/$1M/$1B…) instead of just two endpoint
+  // labels, so the log scale actually reads as a scale.
+  const lo = h.bin_edges_usd[0], hi = h.bin_edges_usd[h.bin_edges_usd.length - 1];
+  const logLo = Math.log10(lo), logHi = Math.log10(hi);
+  let xAxis = '<line x1="' + padL + '" y1="' + (H - padB) + '" x2="' + (W - padR) +
+    '" y2="' + (H - padB) + '" stroke="var(--hairline)" stroke-width="1"></line>';
+  for (let e = Math.ceil(logLo); e <= Math.floor(logHi); e++) {
+    if (e === 0) continue; // skip $1 — too close to the left edge to read
+    const v = Math.pow(10, e);
+    const x = histX(v, h.bin_edges_usd, padL, padR, W);
+    if (x === null) continue;
+    if (x < padL + 24 || x > W - padR - 24) continue; // too close to the card edge to label
+    xAxis += '<line x1="' + x.toFixed(1) + '" y1="' + padT + '" x2="' + x.toFixed(1) +
+      '" y2="' + (H - padB) + '" stroke="var(--hairline)" stroke-width="1" ' +
+      'stroke-dasharray="2,2"></line>' +
+      '<text x="' + x.toFixed(1) + '" y="' + (H - padB + 16) +
+      '" text-anchor="middle" font-size="10" fill="var(--muted-soft)">' +
+      fmtCompact(v) + "</text>";
+  }
+  const xTitle = '<text x="' + (padL + plotW / 2) + '" y="' + (H - 4) +
+    '" text-anchor="middle" font-size="10" fill="var(--muted)">사고 발생 시 손실 규모 ' +
+    "(로그 스케일)</text>";
+
+  // Mean / Max-loss markers — distinct colors + on-chart labels (not just
+  // two identical black dashed lines) so they're distinguishable at a glance.
+  const values = { mean: r.results.expected_annual_loss, p99: r.results.p99 };
+  let lines = "";
+  const legendItems = [];
+  HIST_MARKERS.forEach((m, idx) => {
+    const value = values[m.key];
+    legendItems.push('<span class="hist-legend-item"><i style="background:' +
+      m.color + '"></i>' + m.label + " " + fmtCompact(value) + "</span>");
+    const x = histX(value, h.bin_edges_usd, padL, padR, W);
+    if (x === null) return; // e.g. value is $0 — can't place on log axis
+    const labelY = padT - 18 + idx * 11; // stack the two labels, never overlap
+    // Line itself stays soft (opacity) so it doesn't compete with the bars;
+    // the label text keeps full color/weight so it's still easy to read.
+    lines += '<line x1="' + x.toFixed(1) + '" y1="' + padT + '" x2="' + x.toFixed(1) +
+      '" y2="' + (H - padB) + '" stroke="' + m.color + '" stroke-width="1.5" ' +
+      'stroke-opacity="0.45" stroke-dasharray="4,3"></line>' +
+      '<text x="' + x.toFixed(1) + '" y="' + labelY + '" text-anchor="middle" ' +
+      'font-size="10" font-weight="600" fill="' + m.color + '">' + m.label + "</text>";
+  });
+
+  $("histChart").innerHTML =
+    '<svg viewBox="0 0 ' + W + " " + H + '" class="hist-svg" role="img" ' +
+    'aria-label="Monte Carlo 손실 분포 히스토그램">' +
+    yAxis + yTitle + xAxis + xTitle + bars + lines + "</svg>";
+  $("histLegend").innerHTML = legendItems.join("");
+
+  // Hover hit-zones aligned to the same [padL, W-padR] plot area as the bars.
+  $("histHitzones").style.left = (padL / W * 100) + "%";
+  $("histHitzones").style.right = (padR / W * 100) + "%";
+  $("histHitzones").style.top = (padT / H * 100) + "%";
+  $("histHitzones").style.height = (plotH / H * 100) + "%";
+  const zoneHTML = [];
+  for (let i = 0; i < n; i++) {
+    const share = (h.counts[i] / total * 100);
+    if (share <= 0) { zoneHTML.push('<div class="hist-hitzone"></div>'); continue; }
+    zoneHTML.push('<div class="hist-hitzone">' +
+      '<span class="tooltip">' + fmtCompact(h.bin_edges_usd[i]) + " – " +
+      fmtCompact(h.bin_edges_usd[i + 1]) + "<br>" + share.toFixed(1) +
+      "%</span></div>");
+  }
+
+  // Small hover targets on the Mean/P99 lines themselves — narrow strips,
+  // absolutely positioned over the bin row, so hovering the line shows just
+  // its value (reuses the same .hist-hitzone tooltip pattern as the bins).
+  HIST_MARKERS.forEach((m) => {
+    const value = values[m.key];
+    const x = histX(value, h.bin_edges_usd, padL, padR, W);
+    if (x === null) return;
+    const relPct = ((x - padL) / plotW * 100).toFixed(2);
+    zoneHTML.push('<div class="hist-hitzone" style="position:absolute;left:calc(' +
+      relPct + '% - 8px);width:16px;height:100%"><span class="tooltip">' +
+      m.label + "<br><b>" + fmtCompact(value) + "</b></span></div>");
+  });
+
+  $("histHitzones").innerHTML = zoneHTML.join("");
+}
+
+/* ---------- Layer 2: Loss Breakdown ---------- */
+// Component -> ring color, matching the existing Primary(ink)/Secondary
+// (muted-soft)/Mixed(amber) legend scheme.
+function psColor(ps) {
+  if (ps === "Primary") return "var(--ink)";
+  if (ps === "Mixed/Unclassified") return "var(--risk-moderate)";
+  return "var(--muted-soft)";
+}
+
+// Donut ring via stroke-dasharray arcs — one slice per named cost
+// component (not just the 3-way Primary/Secondary total), so it answers
+// "which specific losses make up this cost" at a glance. Arc proportions
+// always come from the NetDiligence reference shares (refTotal); the
+// dollar figures shown/labeled are the current calculation's toggled
+// base (Mean or P99) allocated by those same reference shares.
+function componentDonutSVG(components, refTotal, base, baseLabel) {
+  const r = 46, cx = 60, cy = 60, sw = 20;
+  const circ = 2 * Math.PI * r;
+  let offset = 0;
+  const gap = Math.min(2, circ * 0.01);
+  const arcs = components.map((c) => {
+    const frac = refTotal > 0 ? c.avg_usd / refTotal : 0;
+    const dash = Math.max(frac * circ - gap, 0);
+    const el = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r +
+      '" fill="none" stroke="' + psColor(c.primary_secondary) + '" stroke-width="' +
+      sw + '" stroke-dasharray="' + dash.toFixed(1) + " " + (circ - dash).toFixed(1) +
+      '" stroke-dashoffset="' + (-offset).toFixed(1) + '" transform="rotate(-90 ' +
+      cx + " " + cy + ')"><title>' + c.name + " (" + c.primary_secondary + ") " +
+      (frac * 100).toFixed(1) + "%, " + fmtFull(base * frac) + "</title></circle>";
+    offset += frac * circ;
+    return el;
+  }).join("");
+  return '<svg viewBox="0 0 120 120" class="donut-svg" role="img" ' +
+    'aria-label="손실 구성 도넛 차트">' + arcs +
+    '<text x="' + cx + '" y="' + (cy - 3) + '" text-anchor="middle" ' +
+    'font-size="15" font-weight="600" fill="var(--ink)">' + fmtCompact(base) + "</text>" +
+    '<text x="' + cx + '" y="' + (cy + 14) + '" text-anchor="middle" ' +
+    'font-size="10" fill="var(--muted)">' + baseLabel + "</text></svg>";
+}
+
+// Shared by every panel that offers a Mean/P99 basis (Crisis/BI/Recovery).
+// Each has its OWN key into state.breakdownBase (2026-08-07, user feedback:
+// was one shared toggle, so P99 on one row changed all three at once).
+function breakdownToggleHTML(isP99, key) {
+  return '<div class="toggle-group js-breakdown-toggle" data-key="' + key + '">' +
+    '<button type="button" data-base="mean" class="' + (isP99 ? "" : "active") +
+    '">평균</button><button type="button" data-base="p99" class="' +
+    (isP99 ? "active" : "") + '">P99</button></div>';
+}
+
+function crisisServicesPanelHTML(lb, r) {
+  if (!lb.available) {
+    return '<p class="body-sm" style="color:var(--muted)">이 업종에는 Crisis ' +
+      'Services 세부 구성이 아직 제공되지 않습니다.</p>' +
+      '<p class="caption" style="margin-top:6px">' + lb.reason + "</p>";
+  }
+  const refTotal = lb.primary_total_usd + lb.secondary_total_usd + lb.unclassified_total_usd;
+  const shareOf = (v) => (refTotal > 0 ? v / refTotal : 0);
+  const pct = (v) => (shareOf(v) * 100).toFixed(1);
+  const isP99 = state.breakdownBase.crisis === "p99";
+  const incidentTotal = isP99 ? r.results.p99 : r.results.expected_annual_loss;
+  const baseLabel = isP99 ? "P99" : "평균";
+  // incidentTotal is the TOTAL loss (Monte Carlo, IRIS-based) — Crisis
+  // Services is only ~47% of that, so the component split is applied to
+  // the Crisis-Services-sized slice of incidentTotal, not the full total.
+  const crisisPct = state.methodology.incident_cost_context.crisis_services_pct;
+  const base = incidentTotal * crisisPct;
+  const amt = (v) => base * shareOf(v);
+  const tagHTML = (ps) => ps === "Mixed/Unclassified"
+    ? '<span class="tag-ps mixed">Unclassified</span>'
+    : '<span class="tag-ps">' + ps + "</span>";
+  return (
+    breakdownToggleHTML(isP99, "crisis") +
+    pillHTML("medium", "참고용 비율 적용",
+      "현재 계산의 " + baseLabel + "(" + fmtFull(incidentTotal) + ") 중 Crisis " +
+      "Services 비중(" + (crisisPct * 100).toFixed(0) + "%, 전산업 SME 평균) = " +
+      fmtFull(base) + "을(를) 먼저 구하고, 그 안에서 NetDiligence " +
+      lb.applicable_industry + " 참고자료의 항목별 비율을 적용한 값입니다 — " +
+      "계산 자체(Monte Carlo LEF/Severity)에는 반영되지 않습니다.") +
+    '<div class="donut-row">' +
+    componentDonutSVG(lb.components, refTotal, base, "CS " + baseLabel) +
+    '<ul class="breakdown-components donut-legend">' +
+    lb.components.map((c) =>
+      '<li><span class="comp-name"><i class="sw" style="background:' +
+      psColor(c.primary_secondary) + '"></i>' + c.name + tagHTML(c.primary_secondary) +
+      "</span><span>" + fmtFull(amt(c.avg_usd)) + " <b>(" + pct(c.avg_usd) +
+      "%)</b></span></li>").join("") +
+    "</ul></div>"
+  );
+}
+
+// Mean of each YEAR's own ratio (not the ratio of the 5-year totals —
+// 2026-08-07, user-directed: those two are mathematically different
+// numbers, "ratio of averages" vs "average of ratios", and only the
+// per-year-average one is guaranteed to equal the mean of the chart's own
+// 5 plotted points). Used for both the headline/dashed-reference-line
+// value AND the accordion row's own headline, so they always agree with
+// each other and with what the chart visually shows.
+function avgYearlyRatio(yearly, numKey, denomKey) {
+  const ratios = yearly.map((y) => y[numKey] / y[denomKey]);
+  return ratios.reduce((s, v) => s + v, 0) / ratios.length;
+}
+
+// Single-series line chart (linear axes — year-over-year swings here are a
+// single order of magnitude, not the heavy-tailed compound losses the
+// log-scale histogram exists for). Hover tooltip uses the same absolutely-
+// positioned hitzone+.tooltip pattern as the histogram's own hover dots,
+// instead of a plain browser-native SVG <title>, so it matches the rest of
+// the app's visual language. `mark` (optional {value, label}) draws a
+// horizontal reference line for the CURRENT calculation's toggled estimate
+// — without it, that number floated above the chart with no visible
+// relationship to the historical trend line below it (2026-08-07, user
+// feedback: "숫자랑 그래프랑 안 맞는다"). The Y-axis auto-extends to fit the
+// mark, so a large-revenue estimate that exceeds every historical year is
+// still visible on the same axis instead of implying a mismatch/error.
+function yearlyLineChartSVG(points, color, mark) {
+  const W = 560, H = 170, padL = 44, padR = 12, padT = 14, padB = 24;
+  const years = points.map((p) => p.year);
+  const rawMax = Math.max(1, ...points.map((p) => p.value), mark ? mark.value : 0);
+  const maxY = rawMax * 1.12;
+  const xOf = (yr) => padL + (years.length > 1
+    ? (yr - years[0]) / (years[years.length - 1] - years[0]) * (W - padL - padR) : 0);
+  const yOf = (v) => padT + (1 - v / maxY) * (H - padT - padB);
+  const gridY = [0, 0.25, 0.5, 0.75, 1].map((f) =>
+    '<line x1="' + padL + '" y1="' + yOf(maxY * f).toFixed(1) + '" x2="' + (W - padR) +
+    '" y2="' + yOf(maxY * f).toFixed(1) + '" stroke="var(--hairline)" stroke-width="1"></line>' +
+    '<text x="' + (padL - 6) + '" y="' + (yOf(maxY * f) + 3).toFixed(1) +
+    '" text-anchor="end" font-size="9" fill="var(--muted-soft)">' + fmtCompact(maxY * f) + "</text>"
+  ).join("");
+  const xLabels = years.map((yr) => '<text x="' + xOf(yr).toFixed(1) + '" y="' + (H - 6) +
+    '" text-anchor="middle" font-size="10" fill="var(--muted)">' + yr + "</text>").join("");
+  const d = points.map((p, i) => (i === 0 ? "M " : "L ") +
+    xOf(p.year).toFixed(1) + " " + yOf(p.value).toFixed(1)).join(" ");
+  const dots = points.map((p) => '<circle cx="' + xOf(p.year).toFixed(1) + '" cy="' +
+    yOf(p.value).toFixed(1) + '" r="3" fill="' + color + '"></circle>').join("");
+  const line = '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2"></path>' + dots;
+  // Dashed line only inside the SVG — the label moves to a separate legend
+  // row below the chart (2026-08-07, user feedback: an inline SVG text
+  // label kept sitting on/near the trend line or data points, cluttering
+  // the chart itself; the histogram already solves this the same way, with
+  // its Mean/P99 markers named in a legend row instead of on-chart text).
+  const markLine = mark ? (
+    '<line x1="' + padL + '" y1="' + yOf(mark.value).toFixed(1) + '" x2="' + (W - padR) +
+    '" y2="' + yOf(mark.value).toFixed(1) + '" stroke="#3b82f6" stroke-width="1.5" ' +
+    'stroke-dasharray="4,3"></line>'
+  ) : "";
+  const hitzones = points.map((p) => '<div class="linechart-hitzone" style="left:' +
+    (xOf(p.year) / W * 100).toFixed(2) + "%;top:" + (yOf(p.value) / H * 100).toFixed(2) +
+    '%"><span class="tooltip">' + p.year + "<br><b>" + fmtFull(p.value) +
+    "</b></span></div>").join("");
+  const legend = mark ? '<div class="hist-legend" style="margin-top:var(--sp-xs)">' +
+    '<span class="hist-legend-item"><i style="background:#3b82f6"></i>' +
+    mark.label + " " + fmtCompact(mark.value) + "</span></div>" : "";
+  return '<div class="linechart-wrap"><svg viewBox="0 0 ' + W + " " + H +
+    '" class="linechart-svg" role="img" aria-label="연도별 추이">' +
+    gridY + markLine + line + xLabels + "</svg>" +
+    '<div class="linechart-hitzones">' + hitzones + "</div></div>" + legend;
+}
+
+function biPanelHTML(c, r) {
+  const isP99 = state.breakdownBase.bi === "p99";
+  const incidentTotal = isP99 ? r.results.p99 : r.results.expected_annual_loss;
+  const baseLabel = isP99 ? "P99" : "평균";
+  const biPct = avgYearlyRatio(c.bi_yearly, "bi_cost_usd", "incident_cost_usd");
+  const maxAmt = incidentTotal * biPct;
+  // Each YEAR's own ratio (that year's BI cost / that year's paired
+  // Incident Cost, both straight from Figure 18) applied to THIS
+  // calculation's incidentTotal — shows how the estimate would have moved
+  // if this company's incident followed each year's historical cost mix,
+  // instead of replaying NetDiligence's own un-scaled dollar figures next
+  // to an unrelated reference line (2026-08-07, user-directed: derive the
+  // year-by-year ratio from the source images, then multiply by Mean/P99).
+  const chartPoints = c.bi_yearly.map((y) =>
+    ({ year: y.year, value: incidentTotal * (y.bi_cost_usd / y.incident_cost_usd) }));
+  const chart = yearlyLineChartSVG(chartPoints, "#fb923c",
+    { value: maxAmt, label: "5년 평균 비율 (" + baseLabel + ")" });
+  return breakdownToggleHTML(isP99, "bi") +
+    pillHTML("medium", "참고용 비율 적용",
+      "각 연도의 영업 중단 비용/Incident Cost 비율(Figure 18)을 현재 계산의 " +
+      baseLabel + "(" + fmtFull(incidentTotal) + ")에 곱한 추정치입니다 — 실제 " +
+      "NetDiligence 연도별 금액이 아니라, 그 비율을 이번 계산 규모에 적용한 값 " +
+      "입니다. 계산 자체(Monte Carlo)에는 반영되지 않습니다.") +
+    '<p class="title-lg" style="margin:10px 0 4px">' + fmtCompact(maxAmt) + "</p>" +
+    '<p class="caption">' + baseLabel + " 기준, 5년 평균 비율(" + (biPct * 100).toFixed(0) +
+    "%) 적용 추정치</p>" +
+    chart + '<p class="caption" style="margin-top:8px">NetDiligence Cyber Claims ' +
+    "Study 2025, Figure 18 (N=" + c.bi_n_claims.toLocaleString() + ", SME) 연도별 비율 × " +
+    "현재 계산 " + baseLabel + " — 2022년은 비율 자체가 튄 해(1억 달러 이상 초대형 " +
+    "사고 2건의 영향)</p>";
+}
+
+function recoveryPanelHTML(c, r) {
+  const isP99 = state.breakdownBase.recovery === "p99";
+  const incidentTotal = isP99 ? r.results.p99 : r.results.expected_annual_loss;
+  const baseLabel = isP99 ? "P99" : "평균";
+  const recoveryPct = avgYearlyRatio(c.recovery_yearly, "recovery_expense_usd", "incident_cost_usd");
+  const maxAmt = incidentTotal * recoveryPct;
+  const chartPoints = c.recovery_yearly.map((y) =>
+    ({ year: y.year, value: incidentTotal * (y.recovery_expense_usd / y.incident_cost_usd) }));
+  const chart = yearlyLineChartSVG(chartPoints, "#fb923c",
+    { value: maxAmt, label: "5년 평균 비율 (" + baseLabel + ")" });
+  return breakdownToggleHTML(isP99, "recovery") +
+    pillHTML("medium", "참고용 비율 적용",
+      "각 연도의 복구 비용/Incident Cost 비율(Figure 20)을 현재 계산의 " +
+      baseLabel + "(" + fmtFull(incidentTotal) + ")에 곱한 추정치입니다 — 실제 " +
+      "NetDiligence 연도별 금액이 아니라, 그 비율을 이번 계산 규모에 적용한 값 " +
+      "입니다. 계산 자체(Monte Carlo)에는 반영되지 않습니다.") +
+    '<p class="title-lg" style="margin:10px 0 4px">' + fmtCompact(maxAmt) + "</p>" +
+    '<p class="caption">' + baseLabel + " 기준, 5년 평균 비율(" + (recoveryPct * 100).toFixed(0) +
+    "%) 적용 추정치</p>" +
+    chart + '<p class="caption" style="margin-top:8px">NetDiligence Cyber Claims ' +
+    "Study 2025, Figure 20 (N=" + c.recovery_n_claims.toLocaleString() + ", SME) 연도별 비율 × " +
+    "현재 계산 " + baseLabel + "</p>";
+}
+
+function legalPanelHTML(c) {
+  // Figure 21 has no paired "Incident Cost" bar (unlike Figure 18/20), so
+  // there's no revenue/Mean-P99-relative basis for Legal — this stays a
+  // flat 5-year SME average breakdown by cost category, not a trend chart.
+  return '<div class="cost-detail-rows">' +
+    '<div class="cost-detail-row"><span>합의금 (Settlement)</span><b>' +
+    fmtFull(c.legal_settlement_usd) + "</b></div>" +
+    '<div class="cost-detail-row"><span>방어비용 (Defense)</span><b>' +
+    fmtFull(c.legal_defense_usd) + "</b></div>" +
+    '<div class="cost-detail-row"><span>규제 과태료 (Regulatory Fines)</span><b>' +
+    fmtFull(c.regulatory_fines_usd) + "</b></div>" +
+    '<div class="cost-detail-row"><span>규제 방어비용 (Regulatory Defense)</span><b>' +
+    fmtFull(c.regulatory_defense_usd) + "</b></div>" +
+    '<div class="cost-detail-row"><span>합계</span><b>' +
+    fmtFull(c.legal_total_usd) + "</b></div></div>" +
+    '<p class="caption" style="margin-top:8px">NetDiligence Cyber Claims Study ' +
+    "2025, Figure 21 (N=" + c.legal_n_claims.toLocaleString() +
+    ", SME, 2020-2024 평균) — 매출·업종 무관 전산업 평균값입니다</p>";
+}
+
+function wireBreakdownToggle(lb, r) {
+  // Crisis/BI/Recovery panels each render their OWN toggle-group instance,
+  // keyed by data-key into state.breakdownBase — clicking one only changes
+  // that row's basis, not the other two (2026-08-07, user feedback: a
+  // single shared toggle meant P99 on one row silently changed all three).
+  document.querySelectorAll("#costAccordion .js-breakdown-toggle").forEach((group) => {
+    const key = group.dataset.key;
+    group.querySelectorAll("button").forEach((b) => {
+      b.addEventListener("click", () => {
+        state.breakdownBase[key] = b.dataset.base;
+        renderIncidentCostAccordion(lb, r);
+      });
+    });
+  });
+}
+
+const COST_ACCORDION_ITEMS = [
+  { key: "crisis", label: "위기대응 (Crisis Services)" },
+  { key: "bi", label: "영업 중단 (Business Interruption)" },
+  { key: "recovery", label: "복구 비용 (Recovery Expense)" },
+  { key: "legal", label: "법적 비용 (평균 SME Legal Cost)" },
+];
+
+// All four rows expand now, but into DIFFERENT shapes of detail matching
+// what each source actually supports (2026-08-07, user-directed): Crisis
+// Services gets its donut (a real ratio within one population); BI/Recovery
+// get a 2020-2024 line chart of their own paired Incident-Cost vs.
+// component-cost trend (Figure 18/20 — no cross-population math, straight
+// from the source's own year-by-year bars); Legal gets its flat SME
+// category breakdown (Figure 21 has no paired trend/Incident-Cost data to
+// chart). None of these compare against each other — still no shared pie.
+function renderIncidentCostAccordion(lb, r) {
+  const c = state.methodology.incident_cost_context;
+  // Each row now reads its OWN independent toggle state (see
+  // state.breakdownBase / wireBreakdownToggle) rather than one shared value.
+  const totalFor = (key) => state.breakdownBase[key] === "p99"
+    ? r.results.p99 : r.results.expected_annual_loss;
+  const crisisBase = totalFor("crisis") * c.crisis_services_pct;
+  // BI and Recovery each have their OWN paired "Incident Cost" figure in
+  // their source chart (NetDiligence Figure 18 for BI, Figure 20 for
+  // Recovery) — a same-population ratio, structurally identical to how
+  // Crisis Services' own 47% (Figure 12) is used. Each is the MEAN of that
+  // year's own ratio across 2020-2024 (avgYearlyRatio — not the ratio of
+  // the 5-year totals; see that function's comment), applied to
+  // incidentTotal. Still cross-population in the same way Crisis Services'
+  // 47% already is (each ratio's own denominator isn't "this specific
+  // company's incidentTotal") — accepted at the same caveat level already
+  // established for Crisis Services. NOTE: because each ratio's
+  // denominator is a DIFFERENT population's own Incident Cost, summing
+  // crisis+bi+recovery pct together already exceeds 100% — these three
+  // rows are NOT meant to be summed into incidentTotal, same reason the
+  // accordion exists instead of a shared pie chart.
+  const biPct = avgYearlyRatio(c.bi_yearly, "bi_cost_usd", "incident_cost_usd");
+  const recoveryPct = avgYearlyRatio(c.recovery_yearly, "recovery_expense_usd", "incident_cost_usd");
+  // Legal (Figure 21) has no paired "Incident Cost" bar in the source, so
+  // no equivalent ratio exists to tie it to incidentTotal — rather than
+  // force an unfounded scale onto it, it stays a flat, un-scaled SME
+  // reference average (same number regardless of Mean/P99 toggle), and the
+  // row label says so directly instead of implying it's calculation-
+  // specific like the other three (2026-08-07, user-directed).
+  // BI/Recovery headlines drop the "(NN%)" suffix (2026-08-07, user-
+  // directed) — just the toggled Mean/P99-relative max amount, no percent.
+  // Crisis Services keeps its % since that pill IS its own defining ratio
+  // (Figure 12's own number, not a derived one like BI/Recovery's).
+  const headline = {
+    crisis: fmtCompact(crisisBase) + " (" + (c.crisis_services_pct * 100).toFixed(0) + "%)",
+    bi: fmtCompact(totalFor("bi") * biPct),
+    legal: fmtCompact(c.legal_total_usd),
+    recovery: fmtCompact(totalFor("recovery") * recoveryPct),
+  };
+  const panelHTML = {
+    crisis: crisisServicesPanelHTML(lb, r),
+    bi: biPanelHTML(c, r),
+    legal: legalPanelHTML(c),
+    recovery: recoveryPanelHTML(c, r),
+  };
+  const prevOpen = document.querySelector("#costAccordion .accordion-header.active");
+  const openKey = prevOpen ? prevOpen.dataset.key : null;
+
+  $("costAccordion").innerHTML = COST_ACCORDION_ITEMS.map((it) =>
+    '<div class="accordion-item"><button type="button" class="accordion-header' +
+    (it.key === openKey ? " active" : "") + '" data-key="' + it.key + '">' +
+    '<span class="accordion-label">' + it.label + "</span>" +
+    '<span class="accordion-value">' + headline[it.key] + "</span>" +
+    '<span class="accordion-chevron">▾</span></button>' +
+    '<div class="accordion-panel" id="panel-' + it.key + '"' +
+    (it.key === openKey ? "" : " hidden") + ">" + panelHTML[it.key] + "</div></div>"
+  ).join("");
+
+  document.querySelectorAll("#costAccordion .accordion-header").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const panel = document.getElementById("panel-" + btn.dataset.key);
+      const willOpen = panel.hidden;
+      document.querySelectorAll("#costAccordion .accordion-panel").forEach((p) => { p.hidden = true; });
+      document.querySelectorAll("#costAccordion .accordion-header").forEach((b) => b.classList.remove("active"));
+      if (willOpen) { panel.hidden = false; btn.classList.add("active"); }
+    });
+  });
+  wireBreakdownToggle(lb, r);
+}
+
+/* ---------- Layer 2: Top Attack Patterns ---------- */
+// Verizon DBIR 2026 (Frequency_DBIR, same source as the Top Threat KPI) —
+// genuinely INDUSTRY-SPECIFIC, unlike the old all-SME NetDiligence
+// Cause_of_Loss card this replaced. Different metric though: this is a
+// SHARE-OF-BREACHES ranking (can sum >100%, one breach can match several
+// DBIR action patterns), not NetDiligence's cost-share-of-total-loss
+// metric — the two are not interchangeable, so don't reintroduce a "%.of
+// total cost" framing here. "Everything Else" is DBIR's own catch-all
+// bucket, excluded from the top-N ranking for the same reason the old
+// card excluded "Other"/"Unknown".
+const DBIR_EXCLUDE = new Set(["Everything Else"]);
+
+function renderTopRiskDrivers(r) {
+  const t = r.top_threat;
+  if (!t || !t.available) {
+    $("riskDrivers").innerHTML = "";
+    return;
+  }
+  const patterns = (t.patterns || [])
+    .filter((p) => !DBIR_EXCLUDE.has(p.incident_type) && p.share > 0)
+    .slice(0, 5);
+  $("riskDrivers").innerHTML = patterns.map((p, i) =>
+    '<li><span class="cause-rank">' + (i + 1) + '</span>' +
+    '<span class="cause-name">' + p.incident_type + "</span>" +
+    '<span class="cause-pct">' + (p.share * 100).toFixed(1) + "%</span></li>"
+  ).join("");
+}
+
+function renderCoverage() {
+  const r = state.result;
+  // KPI card headline is the SAME annual-aggregate P99 shown as the
+  // histogram's "최대 손실 (P99)" marker (r.results.p99) — card and chart
+  // must show the identical figure (2026-08-06, user feedback: they looked
+  // inconsistent when this card used per-incident P95 while the chart
+  // marked annual P99). The per-incident P95 basis this card used to show
+  // still exists — it's the "보장 범위 권고" card's own number below, kept
+  // separately labeled there since it answers a different question
+  // (recommended coverage limit, Option (b) methodology) than "what does
+  // the loss distribution's own P99 marker say."
+  const v = r.results.p99;
+  setBigNumber($("covValue"), v);
+  $("covSub").textContent = "연간 손실 P99 (99% 신뢰수준)";
+}
+
+/* ---------- wiring ---------- */
+$("selIndustry").addEventListener("change", () => {
+  if ($("selIndustry").value) setStep(1); else renderStepper();
+});
+$("selRevenue").addEventListener("change", () => {
+  if ($("selRevenue").value) setStep(2); else renderStepper();
+});
+$("selSsc").addEventListener("change", () => {
+  if ($("selSsc").value) {
+    stepper.sscVisited = true;
+    setStep(3);
+  } else {
+    renderStepper();
+  }
+});
+$("btnSscNext").addEventListener("click", () => {
+  stepper.sscVisited = true;
+  setStep(3);
+});
+document.querySelectorAll("[data-goto]").forEach((b) =>
+  b.addEventListener("click", () => setStep(Number(b.dataset.goto))));
+$("btnRun").addEventListener("click", runCalculation);
+
+function backToStep0() {
+  show("step0");
+  if ($("selIndustry").value && $("selRevenue").value) {
+    // inputs already valid — jump straight to Review for a quick change
+    stepper.sscVisited = true;
+    stepper.maxReached = 3;
+    setStep(3);
+  } else {
+    setStep(0);
+  }
+}
+$("pillEdit").addEventListener("click", backToStep0);
+$("pillEdit").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") backToStep0();
+});
+
+/* ---------- AI Tool (floating) ---------- */
+// Pure UI layer — only READS already-computed state.result/state.methodology
+// to build answers/reports. Never calls calculate(), never mutates state,
+// never touches any render*() function. Zero effect on dashboard logic.
+const AI_QUESTIONS = [
+  { q: "왜 이 업종의 리스크 수준이 이렇게 나왔나요?",
+    a: (r) => {
+      if (r.inputs.ssc_grade) {
+        return "SecurityScorecard " + r.inputs.ssc_grade + "등급을 기준으로 판정했습니다 " +
+          "(A→낮음, B/C→보통, D/F→높음). SSC 등급이 있으면 매출 대비 손실 비교 대신 " +
+          "이 등급을 근거로 사용합니다.";
+      }
+      const band = r.severity.revenue_tier_typical_extreme_usd;
+      return "SecurityScorecard 등급이 없어서, 시뮬레이션 P95 연간 손실(" +
+        fmtCompact(r.results.p95) + ")을 " + r.inputs.revenue_class +
+        " 매출 구간의 IRIS 참조밴드(Typical " + fmtCompact(band[0]) + " ~ Extreme " +
+        fmtCompact(band[1]) + ")와 비교해 판정했습니다.";
+    } },
+  { q: "연간 기대 손실(EAL)과 최대 예상 손실(MPL)은 어떻게 다른가요?",
+    a: (r) => "EAL(" + fmtCompact(r.results.expected_annual_loss) + ")은 무손실 연도(발생 " +
+      "확률 " + (r.results.prob_zero_loss_year * 100).toFixed(0) + "%)까지 포함한 " +
+      "연평균입니다. MPL(" + fmtCompact(r.results.p99) + ")은 연간 총손실의 P99(상위 1% " +
+      "시나리오)로, 평균이 아니라 발생 가능한 극단적 규모를 보여주는 지표라 EAL보다 " +
+      "훨씬 큽니다." },
+  { q: "권장 보험한도는 어떻게 정해지나요?",
+    a: (r) => "권장 보험한도(" + fmtCompact(r.results.max_probable_loss_usd) + ")는 연간 " +
+      "손실이 아니라 사고 1건의 심각도 분포 P95 기준입니다 (업종 P95 × 매출보정 ×" +
+      r.severity.revenue_adjustment.multiplier.toFixed(2) + "). 연간-합계 P95를 쓰면 " +
+      "발생확률이 낮은 업종은 대부분 $0이 나와 보험한도로 쓸 수 없어서, 사고 1건 기준을 " +
+      "채택했습니다." },
+  { q: "위기대응/영업중단/법적비용/복구비용은 왜 서로 더하면 안 되나요?",
+    a: () => "네 항목 모두 NetDiligence 청구 데이터에서 서로 다른 모집단 통계입니다 " +
+      "(위기대응=전체 청구 평균, 영업중단=BI가 발생한 청구만의 평균 등 — 분모가 서로 " +
+      "다릅니다). 그대로 더하면 실제 Incident Cost보다 훨씬 큰 값이 나와서, 하나의 " +
+      "원그래프로 합치지 않고 개별 참고 지표로만 보여줍니다." },
+  { q: "이 계산 결과를 얼마나 신뢰할 수 있나요?",
+    a: (r) => "종합 신뢰도는 '" + ({ High: "높음", Medium: "보통", Low: "낮음" }[r.confidence.level]) +
+      "'입니다.\n근거:\n" + (r.confidence.reasons || []).map((x) => "· " + x).join("\n") },
+];
+
+function aiRenderMenu() {
+  $("aiPanelTitle").textContent = "AI 도구";
+  $("aiBack").hidden = true;
+  if (!state.result) {
+    $("aiPanelBody").innerHTML = '<p class="body-sm" style="color:var(--muted)">' +
+      "먼저 리스크 진단을 실행해주세요.</p>";
+    return;
+  }
+  $("aiPanelBody").innerHTML =
+    '<button type="button" class="ai-menu-item" data-action="report">보고서 생성</button>' +
+    '<button type="button" class="ai-menu-item" data-action="ask">질문하기</button>';
+  $("aiPanelBody").querySelector('[data-action="report"]')
+    .addEventListener("click", aiRenderReportChoice);
+  $("aiPanelBody").querySelector('[data-action="ask"]')
+    .addEventListener("click", aiRenderAskList);
+}
+
+function aiRenderAskList() {
+  $("aiPanelTitle").textContent = "질문하기";
+  $("aiBack").hidden = false;
+  $("aiPanelBody").innerHTML = AI_QUESTIONS.map((item, i) =>
+    '<button type="button" class="ai-menu-item" data-qi="' + i + '">' + item.q + "</button>"
+  ).join("");
+  $("aiPanelBody").querySelectorAll("[data-qi]").forEach((b) => {
+    b.addEventListener("click", () => aiRenderAnswer(Number(b.dataset.qi)));
+  });
+}
+
+function aiRenderAnswer(i) {
+  $("aiPanelTitle").textContent = "질문하기";
+  $("aiBack").hidden = false;
+  const item = AI_QUESTIONS[i];
+  $("aiPanelBody").innerHTML =
+    '<p class="body-sm" style="font-weight:600;margin-bottom:8px">' + item.q + "</p>" +
+    '<div class="ai-answer">' + item.a(state.result) + "</div>";
+}
+
+function aiRenderReportChoice() {
+  $("aiPanelTitle").textContent = "보고서 생성";
+  $("aiBack").hidden = false;
+  $("aiPanelBody").innerHTML =
+    '<button type="button" class="ai-menu-item" data-tier="executive">간편 보고서 (Executive)</button>' +
+    '<button type="button" class="ai-menu-item" data-tier="detailed">상세 보고서 (Detailed)</button>';
+  $("aiPanelBody").querySelectorAll("[data-tier]").forEach((b) => {
+    b.addEventListener("click", () => generateReport(b.dataset.tier));
+  });
+}
+
+// Builds the printable report into #printReport (hidden on screen, shown
+// only under @media print — see CSS) then triggers the browser's native
+// print dialog, where "저장 → PDF"/"Save as PDF" produces the file. No new
+// dependency (jsPDF etc.) — consistent with this project's stdlib-only,
+// no-added-libraries approach on the backend.
+// Minimal standalone stylesheet for the PDF doc — headless Chrome renders
+// report.html in complete isolation from index.html's own <style>, so any
+// class the reused SVG-generating functions rely on (componentDonutSVG,
+// yearlyLineChartSVG, the histogram's own var(--x) colors) has to be
+// re-declared here, including the :root color/spacing tokens those
+// functions' inline "var(--ink)" etc. references resolve against.
+const REPORT_CSS =
+  ':root{--ink:#111;--body:#374151;--muted:#6b7280;--muted-soft:#898989;' +
+  '--hairline:#e5e7eb;--risk-moderate:#f59e0b;--sp-xxs:4px;--sp-xs:8px;' +
+  '--sp-sm:12px;--sp-md:16px;--sp-lg:24px;--sp-xl:32px;--r-xs:4px;--r-md:8px}' +
+  '*{box-sizing:border-box;margin:0;padding:0}' +
+  'body{font-family:Inter,-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;' +
+  'color:var(--ink);padding:32px;font-size:14px}' +
+  '.pr-title{font-size:20px;font-weight:700;margin-bottom:4px}' +
+  '.pr-sub{font-size:12px;color:#666;margin-bottom:20px}' +
+  '.pr-section{margin-top:20px;page-break-inside:avoid}' +
+  '.pr-section-title{font-size:14px;font-weight:700;border-bottom:1px solid #ccc;' +
+  'padding-bottom:4px;margin-bottom:8px}' +
+  '.pr-big{font-size:26px;font-weight:700}' +
+  '.pr-table{width:100%;border-collapse:collapse;font-size:12px}' +
+  '.pr-table td{padding:4px 0;border-bottom:1px solid #eee}' +
+  '.pr-table td:last-child{text-align:right;font-weight:600}' +
+  '.hist-svg,.linechart-svg{width:100%;height:220px;display:block}' +
+  '.hist-legend{display:flex;flex-wrap:wrap;gap:var(--sp-lg);margin-top:var(--sp-sm);' +
+  'font-size:12px;color:var(--body)}' +
+  '.hist-legend-item i{display:inline-block;width:12px;height:3px;border-radius:1px;' +
+  'margin-right:5px;vertical-align:middle}' +
+  '.linechart-wrap{position:relative}.linechart-hitzones{display:none}' +
+  '.donut-row{display:flex;align-items:center;gap:var(--sp-xl);margin-top:var(--sp-md)}' +
+  '.donut-svg{width:160px;height:160px;flex-shrink:0}' +
+  '.donut-legend{flex:1;list-style:none;font-size:12px}' +
+  '.donut-legend li{display:flex;justify-content:space-between;padding:4px 0;' +
+  'border-bottom:1px solid #f3f4f6}' +
+  '.comp-name{display:flex;align-items:center;gap:6px}' +
+  '.sw{display:inline-block;width:10px;height:10px;border-radius:2px;flex-shrink:0}' +
+  '.tag-ps{font-size:10px;font-weight:500;padding:1px 6px;border-radius:var(--r-xs);' +
+  'border:1px solid var(--hairline);color:var(--muted)}' +
+  '.tag-ps.mixed{border:none;background:rgba(245,158,11,.15);color:var(--risk-moderate)}';
+
+function generateReport(tier) {
+  const r = state.result;
+  const c = state.methodology.incident_cost_context;
+  const lb = r.loss_breakdown;
+  const isExec = tier === "executive";
+  const now = new Date();
+  const dateStr = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") +
+    "-" + String(now.getDate()).padStart(2, "0");
+
+  let html = '<div class="pr-title">RiskSync CRQ ' + (isExec ? "Executive" : "Detailed") +
+    " Report</div>" + '<div class="pr-sub">' + r.inputs.industry + " · " +
+    r.inputs.revenue_class + (r.inputs.ssc_grade ? " · SSC " + r.inputs.ssc_grade : "") +
+    " · 생성일 " + dateStr + "</div>";
+
+  // Security Grade — omitted entirely when SSC wasn't provided, not shown
+  // as an empty/"Not Available" field (2026-08-07, user-directed).
+  if (r.inputs.ssc_grade) {
+    html += '<div class="pr-section"><div class="pr-section-title">Security Grade</div>' +
+      '<div class="pr-big">' + r.inputs.ssc_grade + "</div></div>";
+  }
+
+  html += '<div class="pr-section"><div class="pr-section-title">Expected Annual Loss</div>' +
+    '<div class="pr-big">' + fmtCompact(r.results.expected_annual_loss) + "</div></div>";
+
+  html += '<div class="pr-section"><div class="pr-section-title">Maximum Probable Loss (P99)' +
+    '</div><div class="pr-big">' + fmtCompact(r.results.p99) + "</div></div>";
+
+  // Reuse the already-rendered histogram SVG as-is (same data, no re-calc).
+  const histSvg = $("histChart").innerHTML;
+  html += '<div class="pr-section"><div class="pr-section-title">Annual Loss Distribution' +
+    "</div>" + histSvg + "</div>";
+
+  // Incident Cost Breakdown summary — now included in BOTH tiers
+  // (2026-08-07, user-directed), fixed to Mean basis regardless of
+  // whatever toggle state the live accordion panels happen to be in, so
+  // the PDF is reproducible and not dependent on UI state at click time.
+  const total = r.results.expected_annual_loss;
+  const biPct = avgYearlyRatio(c.bi_yearly, "bi_cost_usd", "incident_cost_usd");
+  const recoveryPct = avgYearlyRatio(c.recovery_yearly, "recovery_expense_usd", "incident_cost_usd");
+  const crisisBase = total * c.crisis_services_pct;
+  const biBase = total * biPct;
+  const recoveryBase = total * recoveryPct;
+  const breakdownRows = [
+    ["위기대응 (Crisis Services)", crisisBase],
+    ["영업 중단 (Business Interruption)", biBase],
+    ["복구 비용 (Recovery Expense)", recoveryBase],
+    ["법적 비용 (평균 SME Legal Cost)", c.legal_total_usd],
+  ];
+  html += '<div class="pr-section"><div class="pr-section-title">Incident Cost Breakdown ' +
+    '(평균 기준)</div><table class="pr-table">' + breakdownRows.map(([k, v]) =>
+    "<tr><td>" + k + "</td><td>" + fmtCompact(v) + "</td></tr>").join("") + "</table></div>";
+
+  if (!isExec) {
+    // Expanded detail per component — the same content each accordion
+    // panel shows when clicked open, reusing the exact same SVG-generating
+    // functions (2026-08-07, user-directed: "각 사고비용구성항목 펼쳐서").
+    if (lb.available) {
+      const refTotal = lb.primary_total_usd + lb.secondary_total_usd + lb.unclassified_total_usd;
+      const shareOf = (v) => (refTotal > 0 ? v / refTotal : 0);
+      const donut = componentDonutSVG(lb.components, refTotal, crisisBase, "CS 평균");
+      const compRows = lb.components.map((comp) =>
+        "<tr><td>" + comp.name + "</td><td>" + fmtCompact(crisisBase * shareOf(comp.avg_usd)) +
+        " (" + (shareOf(comp.avg_usd) * 100).toFixed(1) + "%)</td></tr>").join("");
+      html += '<div class="pr-section"><div class="pr-section-title">위기대응 세부 구성</div>' +
+        '<div class="donut-row">' + donut + '<table class="pr-table">' + compRows +
+        "</table></div></div>";
+    }
+
+    const biPoints = c.bi_yearly.map((y) =>
+      ({ year: y.year, value: total * (y.bi_cost_usd / y.incident_cost_usd) }));
+    html += '<div class="pr-section"><div class="pr-section-title">영업 중단 연도별 추이' +
+      "</div>" + yearlyLineChartSVG(biPoints, "#fb923c",
+      { value: biBase, label: "5년 평균 비율" }) + "</div>";
+
+    const recoveryPoints = c.recovery_yearly.map((y) =>
+      ({ year: y.year, value: total * (y.recovery_expense_usd / y.incident_cost_usd) }));
+    html += '<div class="pr-section"><div class="pr-section-title">복구 비용 연도별 추이' +
+      "</div>" + yearlyLineChartSVG(recoveryPoints, "#fb923c",
+      { value: recoveryBase, label: "5년 평균 비율" }) + "</div>";
+
+    html += '<div class="pr-section"><div class="pr-section-title">법적 비용 세부 구성' +
+      '</div><table class="pr-table">' + [
+        ["합의금 (Settlement)", c.legal_settlement_usd],
+        ["방어비용 (Defense)", c.legal_defense_usd],
+        ["규제 과태료 (Regulatory Fines)", c.regulatory_fines_usd],
+        ["규제 방어비용 (Regulatory Defense)", c.regulatory_defense_usd],
+      ].map(([k, v]) => "<tr><td>" + k + "</td><td>" + fmtFull(v) + "</td></tr>").join("") +
+      "</table></div>";
+
+    const t = r.top_threat;
+    if (t && t.available) {
+      const patterns = (t.patterns || [])
+        .filter((p) => !DBIR_EXCLUDE.has(p.incident_type) && p.share > 0).slice(0, 5);
+      html += '<div class="pr-section"><div class="pr-section-title">Top Attack Pattern' +
+        '</div><table class="pr-table">' + patterns.map((p, i) =>
+        "<tr><td>" + (i + 1) + ". " + p.incident_type + "</td><td>" +
+        (p.share * 100).toFixed(1) + "%</td></tr>").join("") + "</table></div>";
+    }
+  }
+
+  const filename = "RiskSync_" + (isExec ? "Executive" : "Detailed") + "_" +
+    r.inputs.industry.replace(/[^\w-]+/g, "") + "_" + dateStr + ".pdf";
+  const fullDoc = "<!doctype html><html><head><meta charset=\"utf-8\">" +
+    "<style>" + REPORT_CSS + "</style></head><body>" + html + "</body></html>";
+  downloadReportPdf(fullDoc, filename, html);
+}
+
+// Chrome-only direct-download path (2026-08-07, user-directed: "크롬 기준
+// 으로 바로 PDF 다운"): POSTs the fully pre-rendered standalone HTML to
+// /api/report/pdf, which shells out to headless Chrome's own
+// --print-to-pdf flag server-side and streams back real PDF bytes — no new
+// client or server dependency, no print dialog. Falls back to the
+// browser's native print dialog (via #printReport + window.print()) if
+// that request fails for any reason (e.g. Chrome not found on this
+// machine), so report generation still works either way.
+function downloadReportPdf(fullDoc, filename, fallbackBodyHtml) {
+  fetch(`${API_BASE}/api/report/pdf`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ html: fullDoc, filename: filename }),
+  }).then((res) => {
+    if (!res.ok) throw new Error("pdf endpoint failed");
+    return res.blob();
+  }).then((blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    $("aiPanel").hidden = true;
+  }).catch(() => {
+    $("printReport").innerHTML = fallbackBodyHtml;
+    $("aiPanel").hidden = true;
+    setTimeout(() => window.print(), 100);
+  });
+}
+
+$("aiFab").addEventListener("click", () => {
+  const panel = $("aiPanel");
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) aiRenderMenu();
+});
+$("aiBack").addEventListener("click", aiRenderMenu);
+// Any click inside the widget (menu items, back button, etc.) re-renders
+// #aiPanelBody via innerHTML, which detaches the clicked element from the
+// DOM. If that same click event were left to bubble up to document, the
+// click-outside check below would see e.target as no longer contained in
+// #aiFabWrap (it's a detached node by then) and incorrectly close the
+// panel right after opening a sub-view. Stopping propagation here — before
+// it reaches document — fixes that (2026-08-07, user-reported: "안되는데").
+$("aiFabWrap").addEventListener("click", (e) => e.stopPropagation());
+document.addEventListener("click", (e) => {
+  if (!$("aiFabWrap").contains(e.target)) $("aiPanel").hidden = true;
+});
+
+(async function init() {
+  await Promise.all([loadOptions(), loadMethodology()]);
+  renderStepper();
+  // deep-link support: /?industry=..&revenue=..&ssc=.. auto-runs Step 0
+  const q = new URLSearchParams(location.search);
+  if (q.get("industry") && q.get("revenue")) {
+    $("selIndustry").value = q.get("industry");
+    $("selRevenue").value = q.get("revenue");
+    if (q.get("ssc")) $("selSsc").value = q.get("ssc");
+    if ($("selIndustry").value && $("selRevenue").value) {
+      stepper.sscVisited = true;
+      stepper.maxReached = 3;
+      runCalculation();
+    }
+  }
+})();
+</script>
+</body>
+</html>
