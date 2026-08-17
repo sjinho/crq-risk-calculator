@@ -1644,7 +1644,7 @@ function generateReport(tier) {
   const dateStr = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") +
     "-" + String(now.getDate()).padStart(2, "0");
 
-  let html = '<div class="pr-title">RiskSync CRQ ' + (isExec ? "Executive" : "Detailed") +
+  let html = '<div class="pr-title">CRQ ' + (isExec ? "Executive" : "Detailed") +
     " Report</div>" + '<div class="pr-sub">' + r.inputs.industry + " · " +
     r.inputs.revenue_class + (r.inputs.ssc_grade ? " · SSC " + r.inputs.ssc_grade : "") +
     " · 생성일 " + dateStr + "</div>";
@@ -1735,7 +1735,7 @@ function generateReport(tier) {
     }
   }
 
-  const filename = "RiskSync_" + (isExec ? "Executive" : "Detailed") + "_" +
+  const filename = "CRQ_" + (isExec ? "Executive" : "Detailed") + "_" +
     r.inputs.industry.replace(/[^\w-]+/g, "") + "_" + dateStr + ".pdf";
   const fullDoc = "<!doctype html><html><head><meta charset=\"utf-8\">" +
     "<style>" + REPORT_CSS + "</style></head><body>" + html + "</body></html>";

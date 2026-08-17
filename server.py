@@ -1,5 +1,5 @@
 """
-RiskSync CRQ — thin HTTP layer for Step 0 + Layer 1 (stdlib only).
+CRQ — thin HTTP layer for Step 0 + Layer 1 (stdlib only).
 
 Serves the static frontend (static/index.html) and two JSON endpoints on
 top of crq_api.py. Contains NO calculation logic of its own — all numbers
@@ -188,5 +188,5 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"RiskSync CRQ serving on http://localhost:{PORT}")
+    print(f"CRQ serving on http://localhost:{PORT}")
     server.serve_forever()
