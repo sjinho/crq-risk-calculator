@@ -628,6 +628,31 @@ def calculate(industry, revenue_class, ssc_grade=None, scenario=None,
             "above_range": int((log_vals > FIXED_HI).sum()),
         }
 
+    # Loss Exceedance Curve (Layer 2 hero chart): P(annual loss > x) across a
+    # fixed $1K-$10B log grid, taken straight from the SAME simulated `losses`
+    # array (no new calculation - same "only reshapes the existing array"
+    # rationale as `histogram` above). An LEC is the CRQ-standard presentation
+    # and, unlike the histogram, needs no separate zero-loss spike: most years
+    # are $0 for low-frequency industries, and that shows up simply as the
+    # curve starting well below 100% (its left-edge value is P(loss > $1K) ~=
+    # the fraction of years with a material loss; the gap up to 1.0 is the
+    # quiet-year mass). Fixed range keeps the curve shape comparable across
+    # calculations.
+    lec = None
+    if losses.size:
+        LEC_LO, LEC_HI, LEC_N = 3.0, 10.0, 121  # log10($1K) .. log10($10B)
+        xs = np.logspace(LEC_LO, LEC_HI, LEC_N)
+        srt = np.sort(losses)
+        # P(loss > x) = 1 - (count of losses <= x) / n
+        ys = 1.0 - np.searchsorted(srt, xs, side="right") / float(losses.size)
+        lec = {
+            "loss_usd": [float(x) for x in xs],
+            "exceed_prob": [float(y) for y in ys],
+            "p_loss_gt_floor": float(ys[0]),
+            "floor_usd": float(xs[0]),
+            "max_usd": float(losses.max()),
+        }
+
     # Per-incident severity percentiles (lognormal closed form). The P95 is
     # the Maximum Probable Loss / Recommended Coverage basis (Assumptions:
     # Recommended_Coverage_Basis) — equals industry P95 x revenue multiplier,
@@ -718,6 +743,7 @@ def calculate(industry, revenue_class, ssc_grade=None, scenario=None,
                 "(industry P95 x revenue multiplier), not annual-aggregate "
                 "percentile",
             "histogram": histogram,
+            "lec": lec,
         },
         "confidence": {
             "level": confidence,
