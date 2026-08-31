@@ -647,7 +647,7 @@ header{border-bottom:1px solid var(--hairline);background:var(--canvas)}
         <div class="dash-section-title">리스크 분석 (Risk Analysis)</div>
 
         <div class="card-mockup hero">
-          <div class="card-mockup-title">Monte Carlo 손실 분포</div>
+          <div class="card-mockup-title">연간 손실 초과확률 곡선 (Loss Exceedance Curve)</div>
           <div class="hist-wrap" id="histWrap">
             <div id="histChart"></div>
             <div id="histHitzones" class="hist-hitzones"></div>
@@ -935,99 +935,125 @@ function renderResults() {
   // via the ealFlag/covFlag pills right on the two headline numbers.
 
   // Layer 2 — Risk Analysis
-  renderHistogram(r);
+  renderLossCurve(r);
   renderIncidentCostAccordion(r.loss_breakdown, r);
   renderTopRiskDrivers(r);
 }
 
-/* ---------- Layer 2: Monte Carlo Loss Distribution ---------- */
-// Two marker colors, borrowed from DESIGN.md's data-viz accent set
-// (series-1/series-3) — legitimate here because these lines aren't
-// risk-severity signals, exactly the case that palette is reserved for.
+/* ---------- Layer 2: Annual Loss Exceedance Curve (LEC) ---------- */
+// Replaces the earlier log-scale histogram. An LEC plots P(annual loss > x),
+// which is the CRQ-standard presentation (RiskLens / Kovrr / Resilience et
+// al.) and sidesteps the histogram's weakness for low-frequency industries:
+// with most years at $0, the histogram had to either show a giant zero
+// spike or drop the zeros (it dropped them, which mismatched the Mean/P99
+// markers). On an LEC the zero mass is just the curve starting below 100%.
+// Two marker colors from DESIGN.md's data-viz accent set (series-1/3) —
+// legitimate here because these aren't risk-severity signals.
 const HIST_MARKERS = [
-  { key: "mean", label: "Mean", color: "#3b82f6" },
-  { key: "p99", label: "최대 손실 (P99)", color: "#fb923c" },
+  { key: "mean", label: "평균", color: "#3b82f6" },
+  { key: "p99", label: "P99 (1-in-100년)", color: "#fb923c" },
 ];
 
-function histX(value, edges, padL, padR, W) {
-  const lo = Math.log10(edges[0]), hi = Math.log10(edges[edges.length - 1]);
-  if (hi <= lo || !(value > 0)) return null;
-  const v = Math.log10(Math.max(value, edges[0]));
-  const frac = Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
-  return padL + frac * (W - padL - padR);
+// Pixel x for a USD value on a fixed log10 axis [loUsd, hiUsd].
+function logX(value, loUsd, hiUsd, padL, padR, W) {
+  const lo = Math.log10(loUsd), hi = Math.log10(hiUsd);
+  const v = Math.log10(Math.min(hiUsd, Math.max(loUsd, value)));
+  return padL + (v - lo) / (hi - lo) * (W - padL - padR);
 }
 
-function renderHistogram(r) {
-  const h = r.results.histogram;
+// P(loss > value) by linear interpolation (in log-x) on the LEC's own points.
+function lecExceedProb(lec, value) {
+  const xs = lec.loss_usd, ys = lec.exceed_prob;
+  if (value <= xs[0]) return ys[0];
+  if (value >= xs[xs.length - 1]) return ys[ys.length - 1];
+  for (let i = 1; i < xs.length; i++) {
+    if (value <= xs[i]) {
+      const t = (Math.log10(value) - Math.log10(xs[i - 1])) /
+                (Math.log10(xs[i]) - Math.log10(xs[i - 1]));
+      return ys[i - 1] + t * (ys[i] - ys[i - 1]);
+    }
+  }
+  return ys[ys.length - 1];
+}
+
+// Round a probability up to a "nice" y-axis ceiling so a low annual curve
+// (e.g. a rare-event industry starting near 9%) still fills the plot height
+// instead of hugging the baseline, while a high-frequency curve keeps a
+// full 0–100% axis.
+function niceCeil(p) {
+  const steps = [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.75, 1];
+  for (let i = 0; i < steps.length; i++) if (p <= steps[i]) return steps[i];
+  return 1;
+}
+
+function renderLossCurve(r) {
+  const lec = r.results.lec;
   $("histHitzones").innerHTML = "";
-  if (!h) {
+  if (!lec) {
     $("histChart").innerHTML = '<p class="body-sm">표시할 손실 표본이 없습니다 ' +
       '(시뮬레이션 전 구간에서 손실 $0).</p>';
     $("histLegend").innerHTML = "";
     return;
   }
-  // Match the viewBox width to the container's actual rendered pixel width
-  // so the SVG scales 1:1 (no preserveAspectRatio="none" stretch) — that
-  // non-uniform scaling was distorting/squishing the <text> glyphs.
+  // Match the viewBox width to the container's real pixel width so the SVG
+  // scales 1:1 (no preserveAspectRatio="none" glyph squish).
   const W = $("histWrap").clientWidth || 640, H = 280;
-  const padL = 52, padR = 10, padT = 30, padB = 34;
+  const padL = 52, padR = 16, padT = 26, padB = 40;
   const plotW = W - padL - padR, plotH = H - padT - padB;
-  const n = h.counts.length;
-  const total = h.counts.reduce((a, b) => a + b, 0) || 1;
-  const maxC = Math.max.apply(null, h.counts.concat([1]));
-  const maxShare = maxC / total * 100;
-  const barW = plotW / n;
+  const loUsd = lec.loss_usd[0], hiUsd = lec.loss_usd[lec.loss_usd.length - 1];
+  const yMax = niceCeil(lec.p_loss_gt_floor * 1.15);
+  const xOf = (usd) => logX(usd, loUsd, hiUsd, padL, padR, W);
+  const yOf = (p) => H - padB - Math.min(1, p / yMax) * plotH;
 
-  let bars = "";
-  for (let i = 0; i < n; i++) {
-    const bh = (h.counts[i] / maxC) * plotH;
-    const x = padL + i * barW, y = H - padB - bh;
-    bars += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' +
-      Math.max(0, barW - 1).toFixed(1) + '" height="' + bh.toFixed(1) +
-      '" fill="var(--primary)" opacity="0.85"></rect>';
-  }
-
-  // Y axis — "발생 비율(%)": 3 gridlines from 0 to the tallest bar's share,
-  // so bar height has an actual, readable scale instead of just "taller =
-  // more" with no reference number.
+  // Y axis — exceedance probability, 0..yMax in 4 gridlines.
   let yAxis = "";
-  for (let k = 0; k <= 2; k++) {
-    const frac = k / 2;
-    const y = H - padB - frac * plotH;
-    const val = maxShare * frac;
+  for (let k = 0; k <= 4; k++) {
+    const p = yMax * k / 4;
+    const y = yOf(p);
     yAxis += '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) +
       '" y2="' + y.toFixed(1) + '" stroke="var(--hairline)" stroke-width="1"></line>' +
       '<text x="' + (padL - 8) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" ' +
-      'font-size="10" fill="var(--muted-soft)">' + val.toFixed(1) + "%</text>";
+      'font-size="10" fill="var(--muted-soft)">' + Math.round(p * 100) + "%</text>";
   }
-  const yTitle = '<text x="' + (padL - 8) + '" y="' + (padT - 12) +
-    '" text-anchor="end" font-size="10" fill="var(--muted)">발생 비율</text>';
+  const yTitle = '<text x="' + (padL - 30) + '" y="' + (padT - 12) +
+    '" text-anchor="start" font-size="10" fill="var(--muted)">초과확률</text>';
 
-  // X axis — decade gridlines ($1K/$1M/$1B…) instead of just two endpoint
-  // labels, so the log scale actually reads as a scale.
-  const lo = h.bin_edges_usd[0], hi = h.bin_edges_usd[h.bin_edges_usd.length - 1];
-  const logLo = Math.log10(lo), logHi = Math.log10(hi);
+  // X axis — decade gridlines $1K..$10B.
+  const logLo = Math.log10(loUsd), logHi = Math.log10(hiUsd);
   let xAxis = '<line x1="' + padL + '" y1="' + (H - padB) + '" x2="' + (W - padR) +
     '" y2="' + (H - padB) + '" stroke="var(--hairline)" stroke-width="1"></line>';
   for (let e = Math.ceil(logLo); e <= Math.floor(logHi); e++) {
-    if (e === 0) continue; // skip $1 — too close to the left edge to read
     const v = Math.pow(10, e);
-    const x = histX(v, h.bin_edges_usd, padL, padR, W);
-    if (x === null) continue;
-    if (x < padL + 24 || x > W - padR - 24) continue; // too close to the card edge to label
+    const x = xOf(v);
+    if (x < padL - 1 || x > W - padR + 1) continue;
     xAxis += '<line x1="' + x.toFixed(1) + '" y1="' + padT + '" x2="' + x.toFixed(1) +
       '" y2="' + (H - padB) + '" stroke="var(--hairline)" stroke-width="1" ' +
-      'stroke-dasharray="2,2"></line>' +
-      '<text x="' + x.toFixed(1) + '" y="' + (H - padB + 16) +
-      '" text-anchor="middle" font-size="10" fill="var(--muted-soft)">' +
-      fmtCompact(v) + "</text>";
+      'stroke-dasharray="2,2"></line>';
+    if (x >= padL + 16 && x <= W - padR - 16) // skip labels that would clip at the card edge
+      xAxis += '<text x="' + x.toFixed(1) + '" y="' + (H - padB + 16) +
+        '" text-anchor="middle" font-size="10" fill="var(--muted-soft)">' +
+        fmtCompact(v) + "</text>";
   }
   const xTitle = '<text x="' + (padL + plotW / 2) + '" y="' + (H - 4) +
-    '" text-anchor="middle" font-size="10" fill="var(--muted)">사고 발생 시 손실 규모 ' +
+    '" text-anchor="middle" font-size="10" fill="var(--muted)">연간 손실 규모 ' +
     "(로그 스케일)</text>";
 
-  // Mean / Max-loss markers — distinct colors + on-chart labels (not just
-  // two identical black dashed lines) so they're distinguishable at a glance.
+  // Curve + soft filled area under it.
+  const pts = [];
+  for (let i = 0; i < lec.loss_usd.length; i++) {
+    pts.push(xOf(lec.loss_usd[i]).toFixed(1) + " " + yOf(lec.exceed_prob[i]).toFixed(1));
+  }
+  const base = (H - padB).toFixed(1);
+  const area = '<polygon points="' + xOf(loUsd).toFixed(1) + " " + base + " " +
+    pts.join(" ") + " " + xOf(hiUsd).toFixed(1) + " " + base +
+    '" fill="var(--primary)" fill-opacity="0.06"></polygon>';
+  const curve = '<polyline points="' + pts.join(" ") + '" fill="none" ' +
+    'stroke="var(--primary)" stroke-width="2"></polyline>';
+
+  // Mean / P99 markers — vertical dashed line + a dot where it meets the
+  // curve + a stacked label. On an LEC the Mean is just a reference x; it
+  // may sit right of P99 for extreme heavy-tailed industries, and that's a
+  // valid reading (the average is dominated by rare tail events), not a bug.
   const values = { mean: r.results.expected_annual_loss, p99: r.results.p99 };
   let lines = "";
   const legendItems = [];
@@ -1035,52 +1061,56 @@ function renderHistogram(r) {
     const value = values[m.key];
     legendItems.push('<span class="hist-legend-item"><i style="background:' +
       m.color + '"></i>' + m.label + " " + fmtCompact(value) + "</span>");
-    const x = histX(value, h.bin_edges_usd, padL, padR, W);
-    if (x === null) return; // e.g. value is $0 — can't place on log axis
-    const labelY = padT - 18 + idx * 11; // stack the two labels, never overlap
-    // Line itself stays soft (opacity) so it doesn't compete with the bars;
-    // the label text keeps full color/weight so it's still easy to read.
+    if (!(value > 0)) return; // e.g. P99 is $0 for a very-low-frequency industry
+    const x = xOf(value);
+    const y = yOf(lecExceedProb(lec, value));
+    const labelY = padT - 14 + idx * 11; // stack the two labels, never overlap
+    const labelX = Math.min(W - padR - 2, Math.max(padL + 2, x));
     lines += '<line x1="' + x.toFixed(1) + '" y1="' + padT + '" x2="' + x.toFixed(1) +
       '" y2="' + (H - padB) + '" stroke="' + m.color + '" stroke-width="1.5" ' +
       'stroke-opacity="0.45" stroke-dasharray="4,3"></line>' +
-      '<text x="' + x.toFixed(1) + '" y="' + labelY + '" text-anchor="middle" ' +
+      '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3.5" fill="' +
+      m.color + '"></circle>' +
+      '<text x="' + labelX.toFixed(1) + '" y="' + labelY + '" text-anchor="middle" ' +
       'font-size="10" font-weight="600" fill="' + m.color + '">' + m.label + "</text>";
   });
 
   $("histChart").innerHTML =
     '<svg viewBox="0 0 ' + W + " " + H + '" class="hist-svg" role="img" ' +
-    'aria-label="Monte Carlo 손실 분포 히스토그램">' +
-    yAxis + yTitle + xAxis + xTitle + bars + lines + "</svg>";
-  $("histLegend").innerHTML = legendItems.join("");
+    'aria-label="연간 손실 초과확률 곡선 (LEC)">' +
+    yAxis + yTitle + xAxis + xTitle + area + curve + lines + "</svg>";
+  const startPct = Math.round(lec.p_loss_gt_floor * 100);
+  const quietNote = lec.p_loss_gt_floor < 0.9
+    ? " · 나머지 " + (100 - startPct) + "%는 대부분 손실 $0인 해" : "";
+  $("histLegend").innerHTML = legendItems.join("") +
+    '<span class="hist-legend-item" style="color:var(--muted)">곡선 시작 ' +
+    startPct + "% = 연간 손실이 " + fmtCompact(lec.floor_usd) + "를 넘을 확률" +
+    quietNote + " · 최대 시뮬 손실 " + fmtCompact(lec.max_usd) + "</span>";
 
-  // Hover hit-zones aligned to the same [padL, W-padR] plot area as the bars.
+  // Hover strips across the plot — "X% 확률로 $Y 초과".
   $("histHitzones").style.left = (padL / W * 100) + "%";
   $("histHitzones").style.right = (padR / W * 100) + "%";
   $("histHitzones").style.top = (padT / H * 100) + "%";
   $("histHitzones").style.height = (plotH / H * 100) + "%";
   const zoneHTML = [];
-  for (let i = 0; i < n; i++) {
-    const share = (h.counts[i] / total * 100);
-    if (share <= 0) { zoneHTML.push('<div class="hist-hitzone"></div>'); continue; }
-    zoneHTML.push('<div class="hist-hitzone">' +
-      '<span class="tooltip">' + fmtCompact(h.bin_edges_usd[i]) + " – " +
-      fmtCompact(h.bin_edges_usd[i + 1]) + "<br>" + share.toFixed(1) +
-      "%</span></div>");
+  const STRIPS = 48;
+  for (let s = 0; s < STRIPS; s++) {
+    const frac = (s + 0.5) / STRIPS;
+    const usd = Math.pow(10, logLo + frac * (logHi - logLo));
+    const prob = lecExceedProb(lec, usd);
+    zoneHTML.push('<div class="hist-hitzone"><span class="tooltip">' +
+      (Math.round(prob * 1000) / 10) + "% 확률로<br>" + fmtCompact(usd) +
+      " 초과</span></div>");
   }
-
-  // Small hover targets on the Mean/P99 lines themselves — narrow strips,
-  // absolutely positioned over the bin row, so hovering the line shows just
-  // its value (reuses the same .hist-hitzone tooltip pattern as the bins).
+  // Narrow strips over the Mean/P99 lines so hovering the line shows its value.
   HIST_MARKERS.forEach((m) => {
     const value = values[m.key];
-    const x = histX(value, h.bin_edges_usd, padL, padR, W);
-    if (x === null) return;
-    const relPct = ((x - padL) / plotW * 100).toFixed(2);
+    if (!(value > 0)) return;
+    const relPct = ((xOf(value) - padL) / plotW * 100).toFixed(2);
     zoneHTML.push('<div class="hist-hitzone" style="position:absolute;left:calc(' +
       relPct + '% - 8px);width:16px;height:100%"><span class="tooltip">' +
       m.label + "<br><b>" + fmtCompact(value) + "</b></span></div>");
   });
-
   $("histHitzones").innerHTML = zoneHTML.join("");
 }
 
@@ -1662,9 +1692,9 @@ function generateReport(tier) {
   html += '<div class="pr-section"><div class="pr-section-title">Maximum Probable Loss (P99)' +
     '</div><div class="pr-big">' + fmtCompact(r.results.p99) + "</div></div>";
 
-  // Reuse the already-rendered histogram SVG as-is (same data, no re-calc).
+  // Reuse the already-rendered LEC SVG as-is (same data, no re-calc).
   const histSvg = $("histChart").innerHTML;
-  html += '<div class="pr-section"><div class="pr-section-title">Annual Loss Distribution' +
+  html += '<div class="pr-section"><div class="pr-section-title">Annual Loss Exceedance Curve' +
     "</div>" + histSvg + "</div>";
 
   // Incident Cost Breakdown summary — now included in BOTH tiers
